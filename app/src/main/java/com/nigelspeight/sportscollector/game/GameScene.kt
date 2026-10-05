@@ -16,8 +16,7 @@ import kotlin.random.Random
 /// forwards touches in scene coordinates.
 class GameScene(
     private val level: Level,
-    private var width: Float,
-    private var height: Float,
+    private var safeArea: SafeArea,
     private val dp: Float,
 ) : Node() {
     private val engine = GameEngine(level)
@@ -32,6 +31,7 @@ class GameScene(
     private val winBackground = WinBackgroundNode()
     private val loseOverlay = LoseOverlayNode(dp)
     private val objectivesOverlay = ObjectivesOverlayNode(dp)
+    private val pauseOverlay = PauseOverlayNode(dp)
 
     /// Invoked when an overlay's Continue/Back button is tapped, so the host can
     /// return to level select.
@@ -40,6 +40,10 @@ class GameScene(
     /// Invoked when the win overlay's Restart button is tapped, so the host can
     /// rebuild the scene from a fresh board.
     var onRestart: (() -> Unit)? = null
+
+    /// Invoked when the pause menu's Quit button is tapped, so the host can
+    /// return all the way to the first screen.
+    var onQuit: (() -> Unit)? = null
 
     var isPaused = false
         private set
@@ -87,6 +91,7 @@ class GameScene(
         addChild(winOverlay)
         addChild(loseOverlay)
         addChild(objectivesOverlay)
+        addChild(pauseOverlay)
     }
 
     /// Called once the hosting view has a size (`SKScene.didMove(to:)`).
@@ -96,21 +101,26 @@ class GameScene(
         AudioManager.playMusic("DrPopperTune1", loop = true)
     }
 
-    fun resize(width: Float, height: Float) {
-        this.width = width
-        this.height = height
+    fun resize(safeArea: SafeArea) {
+        this.safeArea = safeArea
         layoutForCurrentSize()
     }
 
+    /// Backgrounds cover the whole screen; the board, HUD, banner and overlay
+    /// content stay within the safe area, clear of the status bar/cutout.
     private fun layoutForCurrentSize() {
-        background.layout(width, height)
-        boardNode.layout(width * 0.92f, height * 0.72f)
-        boardNode.setPosition(0f, 0f)
-        hud.layout(width, height)
-        winOverlay.layout(width, height)
-        winBackground.layout(width, height)
-        loseOverlay.layout(width, height)
-        objectivesOverlay.layout(width, height)
+        val area = safeArea
+        background.layout(area.screenWidth, area.screenHeight)
+        winBackground.layout(area.screenWidth, area.screenHeight)
+        boardNode.layout(area.width * 0.92f, area.height * 0.72f)
+        boardNode.setPosition(area.centerX, area.centerY)
+        hud.layout(area.width, area.height)
+        hud.setPosition(area.centerX, area.centerY)
+        banner.setPosition(area.centerX, area.centerY)
+        winOverlay.layout(area)
+        loseOverlay.layout(area)
+        objectivesOverlay.layout(area)
+        pauseOverlay.layout(area)
     }
 
     private fun seedInitialTiles() {
@@ -150,6 +160,9 @@ class GameScene(
         // handler can tell whether a given objective still had a nonzero count
         // *before* the removal it's currently looking at.
         val objectivesBefore = engine.objectives.associate { it.kind to it.remaining }
+        // No hints while a popup covers the board - they'd pulse tiles and play
+        // the hint sound behind it.
+        engine.hintsSuspended = isAnyOverlayVisible
         val events = engine.advance(deltaTime)
         if (events.isNotEmpty()) {
             handle(events, objectivesBefore)
@@ -397,11 +410,12 @@ class GameScene(
 
     // region Touch input
 
+    private val isAnyOverlayVisible: Boolean
+        get() = !objectivesOverlay.isHidden || !winOverlay.isHidden || !loseOverlay.isHidden || !pauseOverlay.isHidden
+
     private fun togglePause() {
-        // Direct alpha set, not an animated show/hide: a paused scene never
-        // evaluates queued actions, so a fade-in would never reach visible.
         isPaused = !isPaused
-        if (isPaused) banner.setVisibleInstantly(true, "Paused") else banner.setVisibleInstantly(false)
+        if (isPaused) pauseOverlay.show() else pauseOverlay.hide()
     }
 
     private fun cycleDebugSpeed() {
@@ -413,36 +427,47 @@ class GameScene(
         hud.setSpeedText(speed.label)
     }
 
-    /// `x`/`y` are in scene coordinates. Overlays, HUD and board all sit at the
-    /// scene origin, so scene coordinates are also their local coordinates.
+    /// `x`/`y` are in scene coordinates; each hit test converts to the target
+    /// node's own space by subtracting its (safe-area) position.
     fun touchBegan(pointerId: Int, x: Float, y: Float) {
         if (!objectivesOverlay.isHidden) {
-            if (objectivesOverlay.containsBackButton(x, y)) {
+            if (objectivesOverlay.containsBackButton(x - objectivesOverlay.x, y - objectivesOverlay.y)) {
                 onContinue?.invoke()
-            } else if (objectivesOverlay.containsContinueButton(x, y)) {
+            } else if (objectivesOverlay.containsContinueButton(x - objectivesOverlay.x, y - objectivesOverlay.y)) {
                 objectivesOverlay.hide()
             }
             return
         }
         if (!winOverlay.isHidden) {
-            if (winOverlay.containsRestartButton(x, y)) {
+            if (winOverlay.containsRestartButton(x - winOverlay.x, y - winOverlay.y)) {
                 onRestart?.invoke()
-            } else if (winOverlay.containsContinueButton(x, y)) {
+            } else if (winOverlay.containsContinueButton(x - winOverlay.x, y - winOverlay.y)) {
                 onContinue?.invoke()
             }
             return
         }
         if (!loseOverlay.isHidden) {
-            if (loseOverlay.containsContinueButton(x, y)) onContinue?.invoke()
+            if (loseOverlay.containsContinueButton(x - loseOverlay.x, y - loseOverlay.y)) onContinue?.invoke()
             return
         }
-        if (hud.containsPauseToggle(x, y)) {
+        if (!pauseOverlay.isHidden) {
+            val px = x - pauseOverlay.x
+            val py = y - pauseOverlay.y
+            when {
+                pauseOverlay.containsResumeButton(px, py) -> togglePause()
+                pauseOverlay.containsQuitButton(px, py) -> onQuit?.invoke()
+                pauseOverlay.containsMusicToggle(px, py) -> pauseOverlay.toggleMusic()
+                pauseOverlay.containsSoundToggle(px, py) -> pauseOverlay.toggleSoundEffects()
+            }
+            return
+        }
+        if (hud.containsPauseToggle(x - hud.x, y - hud.y)) {
             pauseButtonPointer = pointerId
             hud.setPauseButtonPressed(true)
             togglePause()
             return
         }
-        if (HUDNode.SHOW_SPEED_BUTTON && hud.containsSpeedToggle(x, y)) {
+        if (HUDNode.SHOW_SPEED_BUTTON && hud.containsSpeedToggle(x - hud.x, y - hud.y)) {
             cycleDebugSpeed()
             return
         }

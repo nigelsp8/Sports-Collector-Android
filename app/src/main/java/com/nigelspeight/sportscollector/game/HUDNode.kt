@@ -56,9 +56,13 @@ class HUDNode(private val dp: Float) : Node() {
         const val SHOW_SPEED_BUTTON = true
         private const val PAUSE_BUTTON_PRESSED_SCALE = 0.95f
 
-        private val CAPTION_COLOR = rgb(129, 145, 142)
-        private val LEVEL_COLOR = rgb(187, 108, 41)
-        private val SCORE_COLOR = rgb(192, 147, 46)
+        // From the iOS asset catalog's named colours (same in light and dark).
+        /// "LEVEL"/"MOVES" captions - `HudLevelValue`.
+        private val CAPTION_COLOR = rgb(60, 72, 124)
+        /// Level and moves numbers - `HudLevel`.
+        private val LEVEL_COLOR = rgb(0, 105, 235)
+        /// Score number - `ScoreValue`.
+        private val SCORE_COLOR = rgb(255, 255, 192)
 
         private fun rgb(r: Int, g: Int, b: Int) = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }

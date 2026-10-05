@@ -32,7 +32,8 @@ object Textures {
     /// cached, so playing through every background doesn't pin ~100MB of bitmaps.
     fun uncachedImage(name: String): Texture = Texture(decode("images/$name.png"))
 
-    private fun pill(name: String): Texture = cache.getOrPut("pills/$name") { Texture(decode("images/pills/$name.png")) }
+    /// A tile-atlas image by file name, e.g. "hockeypuck".
+    fun pill(name: String): Texture = cache.getOrPut("pills/$name") { Texture(decode("images/pills/$name.png")) }
 
     fun tile(type: TileType): Texture = pill(fileName(type))
 

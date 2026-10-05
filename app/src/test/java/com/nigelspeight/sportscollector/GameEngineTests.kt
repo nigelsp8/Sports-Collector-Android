@@ -113,6 +113,20 @@ class HintSystemTests {
         assertFalse(afterReset.any { it is GameEvent.HintSuggested })
     }
 
+    @Test fun noHintsWhileSuspendedAndTimerRestartsWhenResumed() {
+        val engine = GameEngine(levelWithOneLegalMove())
+        engine.hintsSuspended = true
+        engine.advance(GameEngine.INTRO_FADE_DURATION + 0.01)
+
+        // Well past the idle threshold, in frame-sized steps, with a popup up.
+        repeat(600) { assertFalse(engine.advance(0.05).any { it is GameEvent.HintSuggested }) }
+
+        // Once the popup closes, the player gets the full idle period again.
+        engine.hintsSuspended = false
+        assertFalse(engine.advance(GameEngine.HINT_IDLE_THRESHOLD - 0.5).any { it is GameEvent.HintSuggested })
+        assertTrue(engine.advance(1.0).any { it is GameEvent.HintSuggested })
+    }
+
     @Test fun repeatedIdleHintsCycleThroughDifferentLegalMovesWhenMoreThanOneExists() {
         val level = TestLevel.make(rows = listOf(
             listOf(s(PINK_TABLET), s(ORANGE_TABLET), s(PINK_TABLET), s(YELLOW_TABLET), s(BLUE_TABLET), s(YELLOW_TABLET)),

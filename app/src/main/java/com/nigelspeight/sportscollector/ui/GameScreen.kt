@@ -4,12 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,7 +27,7 @@ import com.nigelspeight.sportscollector.level.Level
 /// screen's hidden status bar). `injectedLevel`, when set, is played instead of
 /// loading `mapID` - lets the level editor play-test an unsaved edit.
 @Composable
-fun GameScreen(mapID: Int, injectedLevel: Level?, onExit: () -> Unit) {
+fun GameScreen(mapID: Int, injectedLevel: Level?, onExit: () -> Unit, onQuit: () -> Unit) {
     val level = remember(mapID, injectedLevel) {
         injectedLevel ?: runCatching { AppServices.loadLevel(mapID) }.getOrNull()
     }
@@ -54,15 +49,17 @@ fun GameScreen(mapID: Int, injectedLevel: Level?, onExit: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(GameScene.BACKGROUND_COLOR))
-            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top)),
+            // No inset padding: the game view draws edge to edge (backgrounds and
+            // popup dimming fill the whole screen) and keeps its own board/HUD
+            // clear of the status bar and cutout - see `GameView.updateInsets`.
+            .background(Color(GameScene.BACKGROUND_COLOR)),
         contentAlignment = Alignment.Center,
     ) {
         if (level == null) {
             Text("Failed to load level $mapID", color = Color.White)
         } else {
             AndroidView(
-                factory = { context -> GameView(context, level, onContinue = onExit) },
+                factory = { context -> GameView(context, level, onContinue = onExit, onQuit = onQuit) },
                 modifier = Modifier.fillMaxSize(),
             )
         }

@@ -91,7 +91,7 @@ class GameEngine(
         private set
     var score: Int = 0
         private set
-    val objectives: List<Objective>
+    val objectives: List<Objective> = Objective.objectivesFor(level)
     var phase: EnginePhase = EnginePhase.INTRO_FADE_IN
         private set
     var tutorialRect: GridRect? = tutorialRect(level)
@@ -102,6 +102,12 @@ class GameEngine(
     var debugFallStepInterval: Double = 0.0
     private var fallStepAccumulator = 0.0
 
+    /// While true, no idle hints are suggested and the idle timer is held at
+    /// zero, so the first hint after it's cleared comes a full
+    /// `HINT_IDLE_THRESHOLD` later. The scene sets this while a full-screen
+    /// popup (objectives/win/lose) covers the board.
+    var hintsSuspended = false
+
     private var phaseTimer = INTRO_FADE_DURATION
     private var hintIdleTimer = 0.0
     private var lastHintSuggestion: Pair<GridPoint, GridPoint>? = null
@@ -109,17 +115,6 @@ class GameEngine(
     private var pendingSwapMatches: List<MatchGroup> = emptyList()
 
     init {
-        val objs = level.activeBlocks.mapNotNull { (type, spec) ->
-            if (spec.blocksToWin > 0) Objective(ObjectiveKind.Collect(type), spec.blocksToWin) else null
-        }.toMutableList()
-        // Jelly on an inactive cell can never be cleared (inactive cells never
-        // hold a tile) and is never rendered - counting it here would create an
-        // un-completable objective.
-        val jellyCount = level.cells.count { it.hasJelly && it.isActive }
-        if (jellyCount > 0) {
-            objs += Objective(ObjectiveKind.ClearJelly, jellyCount)
-        }
-        objectives = objs
         pendingEvents += GameEvent.IntroFadeInStarted(INTRO_FADE_DURATION)
     }
 
@@ -179,7 +174,7 @@ class GameEngine(
             }
 
             EnginePhase.IDLE, EnginePhase.TUTORIAL_RESTRICTED -> {
-                hintIdleTimer += deltaTime
+                hintIdleTimer = if (hintsSuspended) 0.0 else hintIdleTimer + deltaTime
                 if (hintIdleTimer >= HINT_IDLE_THRESHOLD) {
                     hintIdleTimer = 0.0
                     val candidates = board.legalSwaps(tutorialRect)

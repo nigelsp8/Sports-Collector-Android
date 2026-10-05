@@ -1,6 +1,7 @@
 package com.nigelspeight.sportscollector.audio
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.SoundPool
@@ -18,6 +19,34 @@ object AudioManager {
 
     private var musicPlayer: MediaPlayer? = null
     private var pausedByLifecycle = false
+    private lateinit var prefs: SharedPreferences
+
+    private const val MUSIC_ENABLED_KEY = "AudioManager.isMusicEnabled"
+    private const val SOUND_EFFECTS_ENABLED_KEY = "AudioManager.isSoundEffectsEnabled"
+
+    /// Persisted across launches; toggled from the pause menu (see
+    /// `PauseOverlayNode`). Muting pauses the current track in place rather
+    /// than stopping it, so unmuting resumes from where it left off instead of
+    /// restarting the loop.
+    var isMusicEnabled: Boolean
+        get() = prefs.getBoolean(MUSIC_ENABLED_KEY, true)
+        set(value) {
+            prefs.edit().putBoolean(MUSIC_ENABLED_KEY, value).apply()
+            val player = musicPlayer ?: return
+            if (value) {
+                player.start()
+            } else if (player.isPlaying) {
+                player.pause()
+            }
+        }
+
+    /// Persisted across launches; toggled from the pause menu. Checked by
+    /// `playSound` before every one-shot sound effect.
+    var isSoundEffectsEnabled: Boolean
+        get() = prefs.getBoolean(SOUND_EFFECTS_ENABLED_KEY, true)
+        set(value) {
+            prefs.edit().putBoolean(SOUND_EFFECTS_ENABLED_KEY, value).apply()
+        }
     private val activeFades = mutableMapOf<MediaPlayer, Runnable>()
 
     private lateinit var soundPool: SoundPool
@@ -31,6 +60,7 @@ object AudioManager {
 
     fun init(context: Context) {
         this.context = context.applicationContext
+        prefs = this.context.getSharedPreferences("audio", Context.MODE_PRIVATE)
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_GAME)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -44,6 +74,7 @@ object AudioManager {
     }
 
     fun playSound(name: String) {
+        if (!isSoundEffectsEnabled) return
         val id = soundIds[name] ?: return
         soundPool.play(id, 1f, 1f, 1, 0, 1f)
     }
@@ -71,8 +102,14 @@ object AudioManager {
         } catch (_: Exception) {
             return
         }
-        player.start()
-        fadeVolume(player, from = 0f, to = 1f, fadeDuration)
+        if (isMusicEnabled) {
+            player.start()
+            fadeVolume(player, from = 0f, to = 1f, fadeDuration)
+        } else {
+            // Loaded but left paused, at full volume, so re-enabling music
+            // from the pause menu just starts it.
+            player.setVolume(1f, 1f)
+        }
         musicPlayer = player
     }
 

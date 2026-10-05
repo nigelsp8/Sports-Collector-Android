@@ -1,6 +1,7 @@
 package com.nigelspeight.sportscollector.game
 
 import android.graphics.Bitmap
+import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.engine.Objective
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.math.cos
@@ -11,6 +12,31 @@ import kotlin.math.sqrt
 private const val WHITE = 0xFFFFFFFF.toInt()
 private const val BLACK = 0xFF000000.toInt()
 private const val DIM = 0xBF000000.toInt() // black at 75% alpha
+
+/// The part of the screen clear of the status bar and display cutout, in scene
+/// coordinates (origin at the screen centre). Game content is laid out within
+/// it; backgrounds and dimming overlays still cover the full screen.
+data class SafeArea(
+    val screenWidth: Float,
+    val screenHeight: Float,
+    val insetLeft: Float = 0f,
+    val insetTop: Float = 0f,
+    val insetRight: Float = 0f,
+    val insetBottom: Float = 0f,
+) {
+    val width: Float get() = screenWidth - insetLeft - insetRight
+    val height: Float get() = screenHeight - insetTop - insetBottom
+    val centerX: Float get() = (insetLeft - insetRight) / 2
+    val centerY: Float get() = (insetTop - insetBottom) / 2
+
+    /// Centres `node` on the safe area and stretches `fullScreen` (a child of
+    /// `node`) back out over the entire screen.
+    fun coverScreen(node: Node, fullScreen: SpriteNode) {
+        node.setPosition(centerX, centerY)
+        fullScreen.setSize(screenWidth, screenHeight)
+        fullScreen.setPosition(-centerX, -centerY)
+    }
+}
 
 /// Full-scene background, reproducing the original game's `drawBackground`
 /// technique: the source art is authored larger than the visible window (a
@@ -192,8 +218,12 @@ class WinOverlayNode(private val dp: Float) : Node() {
         addChild(restartButton)
     }
 
-    fun layout(width: Float, height: Float) {
-        dimOverlay.setSize(width, height)
+    /// Content is laid out within the safe area; the dim overlay still covers
+    /// the whole screen, including under the status bar/cutout.
+    fun layout(area: SafeArea) {
+        val width = area.width
+        val height = area.height
+        area.coverScreen(this, dimOverlay)
 
         val winSize = width * 0.75f
         val winY = -height * 0.04f
@@ -316,8 +346,12 @@ class LoseOverlayNode(private val dp: Float) : Node() {
         addChild(continueButton)
     }
 
-    fun layout(width: Float, height: Float) {
-        dimOverlay.setSize(width, height)
+    /// Content is laid out within the safe area; the dim overlay still covers
+    /// the whole screen, including under the status bar/cutout.
+    fun layout(area: SafeArea) {
+        val width = area.width
+        val height = area.height
+        area.coverScreen(this, dimOverlay)
 
         val loseSize = width * 0.75f
         val loseY = -height * 0.04f
@@ -404,10 +438,14 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
         if (lastWidth > 0) layoutObjectiveRows(lastWidth)
     }
 
-    fun layout(width: Float, height: Float) {
+    /// Content is laid out within the safe area; the dim overlay still covers
+    /// the whole screen, including under the status bar/cutout.
+    fun layout(area: SafeArea) {
+        val width = area.width
+        val height = area.height
         lastWidth = width
         lastHeight = height
-        dimOverlay.setSize(width, height)
+        area.coverScreen(this, dimOverlay)
 
         // "What You Need!" is long enough that a fixed fraction-of-width font
         // size overflowed the screen - shrink to fit instead.
@@ -454,4 +492,129 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
 
     fun containsBackButton(px: Float, py: Float): Boolean = backButton.contains(px, py)
     fun containsContinueButton(px: Float, py: Float): Boolean = continueButton.contains(px, py)
+}
+
+/// Full-screen pause menu: a black 70%-alpha scrim behind `pausebox.png`, with a
+/// "Paused" title, music/sound-effect on-off toggles, and back/quit buttons to
+/// resume or quit to the first screen.
+///
+/// Shown while `GameScene.isPaused` is true, so everything here is shown/hidden
+/// directly rather than with actions - a paused scene never evaluates them.
+class PauseOverlayNode(private val dp: Float) : Node() {
+    companion object {
+        /// `pausebox.png`'s own aspect ratio (790x526), so it's sized from
+        /// screen width without stretching.
+        private const val PAUSE_BOX_ASPECT = 526f / 790f
+    }
+
+    private val dimOverlay = SpriteNode(color = 0xB3000000.toInt()) // black at 70% alpha
+    private val pauseBox = SpriteNode(Textures.image("pausebox"))
+    private val title = LabelNode().apply {
+        text = "Paused"
+        color = WHITE
+    }
+
+    private val musicToggleBackground = toggleBackground()
+    private val musicToggleLabel = LabelNode().apply { color = WHITE }
+    private val soundToggleBackground = toggleBackground()
+    private val soundToggleLabel = LabelNode().apply { color = WHITE }
+
+    private val resumeButton = SpriteNode(Textures.image("backbutton"))
+    private val quitButton = SpriteNode(Textures.image("quitbutton"))
+
+    private fun toggleBackground() = RoundedRectNode(0f, 0f, 10 * dp).apply {
+        fillColor = 0x59000000 // black at 35% alpha
+        strokeColor = 0x99FFFFFF.toInt() // white at 60% alpha
+        lineWidth = 1.5f * dp
+    }
+
+    init {
+        isHidden = true
+        zPosition = 150f
+        addChild(dimOverlay)
+        addChild(pauseBox)
+        addChild(title)
+        addChild(musicToggleBackground)
+        addChild(musicToggleLabel)
+        addChild(soundToggleBackground)
+        addChild(soundToggleLabel)
+        addChild(resumeButton)
+        addChild(quitButton)
+        refreshToggleLabels()
+    }
+
+    /// Content is laid out within the safe area; the dim overlay still covers
+    /// the whole screen, including under the status bar/cutout.
+    fun layout(area: SafeArea) {
+        val width = area.width
+        val height = area.height
+        area.coverScreen(this, dimOverlay)
+
+        val boxWidth = width * 0.82f
+        val boxHeight = boxWidth * PAUSE_BOX_ASPECT
+        val boxY = -height * 0.06f
+        pauseBox.setSize(boxWidth, boxHeight)
+        pauseBox.setPosition(0f, boxY)
+
+        title.fontSize = min(boxWidth * 0.14f, 48 * dp)
+        title.setPosition(0f, boxY - boxHeight * 0.26f)
+
+        val toggleWidth = boxWidth * 0.64f
+        val toggleHeight = 40 * dp
+        val toggleFontSize = min(toggleHeight * 0.5f, 20 * dp)
+        val musicY = boxY + boxHeight * 0.06f
+        val soundY = musicY + toggleHeight + 14 * dp
+        for ((background, label, y) in listOf(
+            Triple(musicToggleBackground, musicToggleLabel, musicY),
+            Triple(soundToggleBackground, soundToggleLabel, soundY),
+        )) {
+            background.width = toggleWidth
+            background.height = toggleHeight
+            background.setPosition(0f, y)
+            label.fontSize = toggleFontSize
+            label.setPosition(0f, y)
+        }
+
+        // Same button size/placement formula as `ObjectivesOverlayNode`'s own
+        // back/continue pair, for a consistent bottom-of-screen row.
+        val buttonSize = width * 0.2f
+        val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
+        resumeButton.setSize(buttonSize, buttonSize)
+        resumeButton.setPosition(-width * 0.18f, buttonY)
+        quitButton.setSize(buttonSize, buttonSize)
+        quitButton.setPosition(width * 0.18f, buttonY)
+    }
+
+    private fun refreshToggleLabels() {
+        musicToggleLabel.text = "Music: ${if (AudioManager.isMusicEnabled) "On" else "Off"}"
+        soundToggleLabel.text = "Sound FX: ${if (AudioManager.isSoundEffectsEnabled) "On" else "Off"}"
+    }
+
+    fun show() {
+        refreshToggleLabels()
+        removeAllActions()
+        isHidden = false
+        alpha = 1f
+    }
+
+    fun hide() {
+        removeAllActions()
+        isHidden = true
+    }
+
+    fun toggleMusic() {
+        AudioManager.isMusicEnabled = !AudioManager.isMusicEnabled
+        refreshToggleLabels()
+    }
+
+    fun toggleSoundEffects() {
+        AudioManager.isSoundEffectsEnabled = !AudioManager.isSoundEffectsEnabled
+        refreshToggleLabels()
+    }
+
+    /// Hit tests in this node's own coordinate space.
+    fun containsMusicToggle(px: Float, py: Float): Boolean = musicToggleBackground.contains(px, py)
+    fun containsSoundToggle(px: Float, py: Float): Boolean = soundToggleBackground.contains(px, py)
+    fun containsResumeButton(px: Float, py: Float): Boolean = resumeButton.contains(px, py)
+    fun containsQuitButton(px: Float, py: Float): Boolean = quitButton.contains(px, py)
 }

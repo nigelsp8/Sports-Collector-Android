@@ -1,5 +1,7 @@
 package com.nigelspeight.sportscollector.engine
 
+import com.nigelspeight.sportscollector.level.Level
+
 data class GridPoint(val row: Int, val col: Int)
 
 data class GridRect(val minRow: Int, val maxRow: Int, val minCol: Int, val maxCol: Int) {
@@ -50,6 +52,25 @@ class Objective(val kind: ObjectiveKind, val total: Int) {
 
     fun decrement(amount: Int = 1) {
         remaining = maxOf(0, remaining - amount)
+    }
+
+    companion object {
+        /// Derives a level's required objectives from its block/jelly layout -
+        /// shared by `GameEngine` (to track progress during play) and the section
+        /// screen (to preview a level's objectives before playing).
+        fun objectivesFor(level: Level): List<Objective> {
+            val objs = level.activeBlocks.mapNotNull { (type, spec) ->
+                if (spec.blocksToWin > 0) Objective(ObjectiveKind.Collect(type), spec.blocksToWin) else null
+            }.toMutableList()
+            // Jelly on an inactive cell can never be cleared (inactive cells never
+            // hold a tile) and is never rendered - counting it here would create an
+            // un-completable objective.
+            val jellyCount = level.cells.count { it.hasJelly && it.isActive }
+            if (jellyCount > 0) {
+                objs += Objective(ObjectiveKind.ClearJelly, jellyCount)
+            }
+            return objs
+        }
     }
 }
 
