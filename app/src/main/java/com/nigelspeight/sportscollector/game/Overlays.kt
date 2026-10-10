@@ -247,7 +247,7 @@ class WinOverlayNode(private val dp: Float) : Node() {
         val buttonSize = width * 0.2f
         val spacing = buttonSize + 16 * dp
         val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
-        continueButton.setSize(buttonSize, buttonSize)
+        continueButton.setSize(buttonSize * 1.5f, buttonSize * 1.5f)
         continueButton.setPosition(spacing, buttonY)
         restartButton.setSize(buttonSize, buttonSize)
         restartButton.setPosition(-spacing, buttonY)
@@ -330,12 +330,14 @@ class WinOverlayNode(private val dp: Float) : Node() {
 }
 
 /// Full-screen "lose" overlay: darkens the screen behind a lose card with a
-/// Continue button that returns to level select.
+/// Continue button that returns to level select and a Restart button that
+/// replays the level.
 class LoseOverlayNode(private val dp: Float) : Node() {
     private val dimOverlay = SpriteNode(color = DIM)
     private val title = titleLabel("Unlucky!", 80 * dp)
     private val loseImage = SpriteNode(Textures.image("lose"))
     private val continueButton = SpriteNode(Textures.image("nextbutton"))
+    private val restartButton = SpriteNode(Textures.image("rewindbutton"))
 
     init {
         isHidden = true
@@ -344,6 +346,7 @@ class LoseOverlayNode(private val dp: Float) : Node() {
         addChild(title)
         addChild(loseImage)
         addChild(continueButton)
+        addChild(restartButton)
     }
 
     /// Content is laid out within the safe area; the dim overlay still covers
@@ -363,8 +366,12 @@ class LoseOverlayNode(private val dp: Float) : Node() {
         title.setPosition(0f, loseY - loseSize / 2 - titleFontSize * 0.3f)
 
         val buttonSize = width * 0.2f
+        val spacing = buttonSize + 16 * dp
+        val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
         continueButton.setSize(buttonSize, buttonSize)
-        continueButton.setPosition(0f, height / 2 - buttonSize * 0.75f - 24 * dp)
+        continueButton.setPosition(spacing, buttonY)
+        restartButton.setSize(buttonSize, buttonSize)
+        restartButton.setPosition(-spacing, buttonY)
     }
 
     fun show() {
@@ -374,6 +381,7 @@ class LoseOverlayNode(private val dp: Float) : Node() {
     }
 
     fun containsContinueButton(px: Float, py: Float): Boolean = continueButton.contains(px, py)
+    fun containsRestartButton(px: Float, py: Float): Boolean = restartButton.contains(px, py)
 }
 
 /// One "icon + required amount" row in the objectives list.
@@ -462,7 +470,7 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
         val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
         backButton.setSize(buttonSize, buttonSize)
         backButton.setPosition(-width * 0.18f, buttonY)
-        continueButton.setSize(buttonSize, buttonSize)
+        continueButton.setSize(buttonSize * 1.5f, buttonSize * 1.5f)
         continueButton.setPosition(width * 0.18f, buttonY)
 
         layoutObjectiveRows(width)
@@ -495,8 +503,8 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
 }
 
 /// Full-screen pause menu: a black 70%-alpha scrim behind `pausebox.png`, with a
-/// "Paused" title, music/sound-effect on-off toggles, and back/quit buttons to
-/// resume or quit to the first screen.
+/// "Paused" title, music/sound-effect on-off toggles, and back/restart/quit
+/// buttons to resume, replay the level, or quit to the first screen.
 ///
 /// Shown while `GameScene.isPaused` is true, so everything here is shown/hidden
 /// directly rather than with actions - a paused scene never evaluates them.
@@ -520,6 +528,7 @@ class PauseOverlayNode(private val dp: Float) : Node() {
     private val soundToggleLabel = LabelNode().apply { color = WHITE }
 
     private val resumeButton = SpriteNode(Textures.image("backbutton"))
+    private val restartButton = SpriteNode(Textures.image("rewindbutton"))
     private val quitButton = SpriteNode(Textures.image("quitbutton"))
 
     private fun toggleBackground() = RoundedRectNode(0f, 0f, 10 * dp).apply {
@@ -539,6 +548,7 @@ class PauseOverlayNode(private val dp: Float) : Node() {
         addChild(soundToggleBackground)
         addChild(soundToggleLabel)
         addChild(resumeButton)
+        addChild(restartButton)
         addChild(quitButton)
         refreshToggleLabels()
     }
@@ -575,14 +585,21 @@ class PauseOverlayNode(private val dp: Float) : Node() {
             label.setPosition(0f, y)
         }
 
-        // Same button size/placement formula as `ObjectivesOverlayNode`'s own
-        // back/continue pair, for a consistent bottom-of-screen row.
+        // Same bottom-of-screen placement formula as `ObjectivesOverlayNode`'s
+        // own back/continue pair, but with restart/quit sharing a row above the
+        // centered back (resume) button below them.
         val buttonSize = width * 0.2f
-        val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
-        resumeButton.setSize(buttonSize, buttonSize)
-        resumeButton.setPosition(-width * 0.18f, buttonY)
+        val spacing = buttonSize + 16 * dp
+        val backRowY = height / 2 - buttonSize * 0.75f - 24 * dp
+        val topRowY = backRowY - buttonSize - 16 * dp
+
+        restartButton.setSize(buttonSize, buttonSize)
+        restartButton.setPosition(spacing, topRowY)
         quitButton.setSize(buttonSize, buttonSize)
-        quitButton.setPosition(width * 0.18f, buttonY)
+        quitButton.setPosition(-spacing, topRowY)
+
+        resumeButton.setSize(buttonSize * 1.5f, buttonSize * 1.5f)
+        resumeButton.setPosition(0f, backRowY)
     }
 
     private fun refreshToggleLabels() {
@@ -616,5 +633,6 @@ class PauseOverlayNode(private val dp: Float) : Node() {
     fun containsMusicToggle(px: Float, py: Float): Boolean = musicToggleBackground.contains(px, py)
     fun containsSoundToggle(px: Float, py: Float): Boolean = soundToggleBackground.contains(px, py)
     fun containsResumeButton(px: Float, py: Float): Boolean = resumeButton.contains(px, py)
+    fun containsRestartButton(px: Float, py: Float): Boolean = restartButton.contains(px, py)
     fun containsQuitButton(px: Float, py: Float): Boolean = quitButton.contains(px, py)
 }

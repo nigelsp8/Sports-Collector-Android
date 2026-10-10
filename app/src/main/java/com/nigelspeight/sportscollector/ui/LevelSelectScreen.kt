@@ -74,6 +74,7 @@ fun LevelSelectScreen(onPlay: (mapID: Int) -> Unit, onEdit: (mapID: Int, level: 
                     if (level.activeBlocks.any { (type, spec) -> type.isBacteria && spec.blocksToWin > 0 }) {
                         objectiveTags += "Bacteria"
                     }
+                    if (level.cells.any { it.isActive && (it.hasWallBelow || it.hasWallRight) }) objectiveTags += "Walls"
                     if (objectiveTags.isNotEmpty()) lines += objectiveTags.joinToString(" · ")
                 }
 

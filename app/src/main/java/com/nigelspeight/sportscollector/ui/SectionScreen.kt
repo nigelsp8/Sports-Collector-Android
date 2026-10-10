@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.nigelspeight.sportscollector.AppServices
+import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.engine.Objective
 import com.nigelspeight.sportscollector.engine.ObjectiveKind
 import com.nigelspeight.sportscollector.game.Textures
@@ -165,9 +166,18 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
                 items(rows) { row ->
                     LevelCard(row, section) {
                         when (row) {
-                            is LevelListRow.NextLevel -> onPlay(row.mapID)
-                            is LevelListRow.Won -> onPlay(row.mapID)
-                            is LevelListRow.AdvanceToNextSection -> state.section = row.next
+                            is LevelListRow.NextLevel -> {
+                                AudioManager.playSound("Menu1")
+                                onPlay(row.mapID)
+                            }
+                            is LevelListRow.Won -> {
+                                AudioManager.playSound("Menu1")
+                                onPlay(row.mapID)
+                            }
+                            is LevelListRow.AdvanceToNextSection -> {
+                                AudioManager.playSound("Menu1")
+                                state.section = row.next
+                            }
                             LevelListRow.GameCompleted, LevelListRow.ComingSoon, is LevelListRow.Locked -> Unit
                         }
                     }

@@ -29,7 +29,7 @@ sealed interface Screen {
 class MainActivity : ComponentActivity() {
     /// Flip to `false` to boot straight into the level-select/editor tool
     /// instead of the user-facing section carousel.
-    private val launchIntoSectionScreen = false //true
+    private val launchIntoSectionScreen = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

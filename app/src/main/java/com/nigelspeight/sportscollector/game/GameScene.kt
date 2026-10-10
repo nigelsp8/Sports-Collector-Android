@@ -8,6 +8,7 @@ import com.nigelspeight.sportscollector.engine.GameEvent
 import com.nigelspeight.sportscollector.engine.GridPoint
 import com.nigelspeight.sportscollector.engine.ObjectiveKind
 import com.nigelspeight.sportscollector.engine.StarThreshold
+import com.nigelspeight.sportscollector.engine.TileType
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.random.Random
 
@@ -37,7 +38,7 @@ class GameScene(
     /// return to level select.
     var onContinue: (() -> Unit)? = null
 
-    /// Invoked when the win overlay's Restart button is tapped, so the host can
+    /// Invoked when a win/lose/pause overlay's Restart button is tapped, so the host can
     /// rebuild the scene from a fresh board.
     var onRestart: (() -> Unit)? = null
 
@@ -55,6 +56,17 @@ class GameScene(
     /// `animationTime` when `selectedPoint` was last set, so a selection that's
     /// never followed up on auto-clears.
     private var selectedAt: Double? = null
+    /// `animationTime` of the most recent `TileMoved`/`TilePlaced` event, i.e.
+    /// the last time any tile was actually falling - used to hold off the
+    /// win/lose overlay until the board has been visibly still for
+    /// `FALL_SETTLE_DELAY`, so it never pops up while tiles are still dropping.
+    private var lastFallEventTime: Double? = null
+    /// `animationTime` baseline (the later of the last fall event and the
+    /// moment the outcome arrived) that `pendingWinScore`/`pendingLose` are
+    /// waiting out `FALL_SETTLE_DELAY` against - see `update`.
+    private var pendingOutcomeAt: Double? = null
+    private var pendingWinScore: Int? = null
+    private var pendingLose = false
     private var announcedTutorial = false
     /// The pointer currently pressing the pause button, if any.
     private var pauseButtonPointer: Int? = null
@@ -74,6 +86,9 @@ class GameScene(
     companion object {
         /// How long a tile stays visibly selected with no follow-up tap.
         private const val SELECTION_TIMEOUT = 3.0
+        /// How long the board must sit with no falling tiles before a pending
+        /// win/lose outcome is revealed.
+        private const val FALL_SETTLE_DELAY = 2.0
         const val BACKGROUND_COLOR = 0xFF141414.toInt()
     }
 
@@ -169,6 +184,19 @@ class GameScene(
             refreshHUD()
         }
 
+        val since = pendingOutcomeAt
+        if (since != null && animationTime - since >= FALL_SETTLE_DELAY) {
+            pendingOutcomeAt = null
+            val score = pendingWinScore
+            if (score != null) {
+                pendingWinScore = null
+                revealWin(score)
+            } else if (pendingLose) {
+                pendingLose = false
+                revealLose()
+            }
+        }
+
         if (!announcedTutorial && engine.phase == EnginePhase.TUTORIAL_RESTRICTED) {
             announcedTutorial = true
             engine.tutorialRect?.let { rect ->
@@ -253,13 +281,22 @@ class GameScene(
     private fun playBatchSounds(events: List<GameEvent>) {
         if (events.any { it is GameEvent.TileMoved }) playSound("PillsFalling1Sec")
         if (events.any { it is GameEvent.TileRemoved && it.tile.isBacteria }) playSound("BacteriaFall_1sec")
-        if (events.any { it is GameEvent.TileRemoved && !it.tile.isBacteria }) playSound("StarryEffect1A_UpBeat")
+        // Every non-bacteria `TileRemoved` comes from a colour-run match (the
+        // only other match cause, bottom-row bacteria, is handled above) - so
+        // this is exactly "3 or more of a kind". Split the cue by whether the
+        // matched tile is a current collection objective.
+        val matchedTiles = events.mapNotNull { (it as? GameEvent.TileRemoved)?.tile?.takeIf { tile -> !tile.isBacteria } }
+        if (matchedTiles.any(::isObjectiveTile)) playSound("Objective")
+        if (matchedTiles.any { !isObjectiveTile(it) }) playSound("Matching")
         if (events.any { it is GameEvent.JellyCleared }) playSound("Squelch_Tile1")
         if (events.any { it is GameEvent.SolidDamaged && it.to != null }) playSound("Explosion2Loud")
         if (events.any { it is GameEvent.SolidDamaged && it.to == null }) playSound("Explosion1")
         if (events.any { it is GameEvent.WallDestroyed }) playSound(if (Random.nextBoolean()) "Siren1_2secs" else "Siren2_2secs")
         if (events.any { it is GameEvent.ComboPillDowngraded }) playSound("PillX2")
     }
+
+    private fun isObjectiveTile(tile: TileType): Boolean =
+        engine.objectives.any { it.kind == ObjectiveKind.Collect(tile) }
 
     private fun playSound(name: String) = AudioManager.playSound(name)
 
@@ -334,18 +371,24 @@ class GameScene(
 
             is GameEvent.SwapAnimated -> {
                 boardNode.swapTileNodes(event.a, event.b)
-                playSound("Swap_Pill1A")
+                //playSound("Swap_Pill1A")
             }
 
-            is GameEvent.TilePlaced -> boardNode.placeTile(event.type, event.point, droppingInFromAbove = true)
+            is GameEvent.TilePlaced -> {
+                boardNode.placeTile(event.type, event.point, droppingInFromAbove = true)
+                lastFallEventTime = animationTime
+            }
 
             is GameEvent.SwapRejected -> {
                 boardNode.pulse(event.a)
                 boardNode.pulse(event.b)
-                playSound("SwapPillError1")
+                playSound("NoSwap")
             }
 
-            is GameEvent.TileMoved -> boardNode.moveTile(event.from, event.to, duration = 0.16)
+            is GameEvent.TileMoved -> {
+                boardNode.moveTile(event.from, event.to, duration = 0.16)
+                lastFallEventTime = animationTime
+            }
 
             is GameEvent.ComboPillDowngraded -> boardNode.updateTexture(event.point, event.to)
 
@@ -369,27 +412,42 @@ class GameScene(
             GameEvent.TutorialUnlocked -> tutorialOverlay.hide()
 
             is GameEvent.Won -> {
-                AudioManager.playMusic("PILLPOPTUNE", loop = false)
-                // The engine's own score/stars are computed the instant the board
-                // is solved, before the moves-remaining bonus the win overlay
-                // reveals - recompute both against the post-bonus total so the
-                // persisted result and the star rating shown both reflect it.
-                val movesLeft = engine.movesRemaining
-                val finalScore = event.score + movesLeft * WinOverlayNode.MOVE_BONUS_PER_MOVE
-                val finalStars = StarThreshold.stars(finalScore, level.starThresholds)
-                AppServices.progress.recordWin(level.mapNumber, finalScore, finalStars)
+                // The rotating win backdrop swaps in immediately, so the player
+                // reads the win right away even while tiles are still falling -
+                // only the overlay itself (with its score/stars/moves-bonus
+                // reveal) waits for the board to settle, via the pending-outcome
+                // check in `update`.
                 background.isHidden = true
                 winBackground.isHidden = false
-                winOverlay.show(event.score, movesLeft, finalStars) { currentScore, moves ->
-                    hud.update(level.mapNumber, currentScore, moves, engine.objectives)
-                }
+                pendingWinScore = event.score
+                pendingOutcomeAt = lastFallEventTime ?: animationTime
             }
 
             GameEvent.Lost -> {
-                AudioManager.playMusic("DoctorPopperLoseJingle_4sec", loop = false)
-                loseOverlay.show()
+                pendingLose = true
+                pendingOutcomeAt = lastFallEventTime ?: animationTime
             }
         }
+    }
+
+    private fun revealWin(score: Int) {
+        AudioManager.playMusic("PILLPOPTUNE", loop = false)
+        // The engine's own score/stars are computed the instant the board is
+        // solved, before the moves-remaining bonus the win overlay reveals -
+        // recompute both against the post-bonus total so the persisted result
+        // and the star rating shown both reflect it.
+        val movesLeft = engine.movesRemaining
+        val finalScore = score + movesLeft * WinOverlayNode.MOVE_BONUS_PER_MOVE
+        val finalStars = StarThreshold.stars(finalScore, level.starThresholds)
+        AppServices.progress.recordWin(level.mapNumber, finalScore, finalStars)
+        winOverlay.show(score, movesLeft, finalStars) { currentScore, moves ->
+            hud.update(level.mapNumber, currentScore, moves, engine.objectives)
+        }
+    }
+
+    private fun revealLose() {
+        AudioManager.playMusic("DoctorPopperLoseJingle_4sec", loop = false)
+        loseOverlay.show()
     }
 
     /// After a shuffle the engine's board has an entirely fresh arrangement;
@@ -432,42 +490,71 @@ class GameScene(
     fun touchBegan(pointerId: Int, x: Float, y: Float) {
         if (!objectivesOverlay.isHidden) {
             if (objectivesOverlay.containsBackButton(x - objectivesOverlay.x, y - objectivesOverlay.y)) {
+                playSound("Menu1")
                 onContinue?.invoke()
             } else if (objectivesOverlay.containsContinueButton(x - objectivesOverlay.x, y - objectivesOverlay.y)) {
+                playSound("Menu1")
                 objectivesOverlay.hide()
             }
             return
         }
         if (!winOverlay.isHidden) {
             if (winOverlay.containsRestartButton(x - winOverlay.x, y - winOverlay.y)) {
+                playSound("Menu1")
                 onRestart?.invoke()
             } else if (winOverlay.containsContinueButton(x - winOverlay.x, y - winOverlay.y)) {
+                playSound("Menu1")
                 onContinue?.invoke()
             }
             return
         }
         if (!loseOverlay.isHidden) {
-            if (loseOverlay.containsContinueButton(x - loseOverlay.x, y - loseOverlay.y)) onContinue?.invoke()
+            if (loseOverlay.containsRestartButton(x - loseOverlay.x, y - loseOverlay.y)) {
+                playSound("Menu1")
+                onRestart?.invoke()
+            } else if (loseOverlay.containsContinueButton(x - loseOverlay.x, y - loseOverlay.y)) {
+                playSound("Menu1")
+                onContinue?.invoke()
+            }
             return
         }
         if (!pauseOverlay.isHidden) {
             val px = x - pauseOverlay.x
             val py = y - pauseOverlay.y
             when {
-                pauseOverlay.containsResumeButton(px, py) -> togglePause()
-                pauseOverlay.containsQuitButton(px, py) -> onQuit?.invoke()
-                pauseOverlay.containsMusicToggle(px, py) -> pauseOverlay.toggleMusic()
-                pauseOverlay.containsSoundToggle(px, py) -> pauseOverlay.toggleSoundEffects()
+                pauseOverlay.containsResumeButton(px, py) -> {
+                    playSound("Menu1")
+                    togglePause()
+                }
+                pauseOverlay.containsRestartButton(px, py) -> {
+                    playSound("Menu1")
+                    onRestart?.invoke()
+                }
+                pauseOverlay.containsQuitButton(px, py) -> {
+                    playSound("Menu1")
+                    onQuit?.invoke()
+                }
+                pauseOverlay.containsMusicToggle(px, py) -> {
+                    playSound("Menu1")
+                    pauseOverlay.toggleMusic()
+                }
+                pauseOverlay.containsSoundToggle(px, py) -> {
+                    playSound("Menu1")
+                    pauseOverlay.toggleSoundEffects()
+                }
             }
             return
         }
         if (hud.containsPauseToggle(x - hud.x, y - hud.y)) {
             pauseButtonPointer = pointerId
             hud.setPauseButtonPressed(true)
+            if (AudioManager.areSoundsOn()) playSound("Menu1")
             togglePause()
+            if (AudioManager.areSoundsOn()) playSound("Menu1")
             return
         }
         if (HUDNode.SHOW_SPEED_BUTTON && hud.containsSpeedToggle(x - hud.x, y - hud.y)) {
+            playSound("Menu1")
             cycleDebugSpeed()
             return
         }

@@ -8,11 +8,14 @@ import android.media.SoundPool
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
+import kotlin.random.Random
 
 /// Background-music playback, mirroring the original game's single-channel
 /// model - only one music track ever plays at a time, switched between gameplay
-/// loop and win/lose jingles. Gameplay sound effects are short one-shots and go
-/// through a `SoundPool` (`playSound`).
+/// loop and win/lose jingles. Also owns the logical-name -> numbered-`.wav`
+/// one-shot sound effect table (`playSound`), so any caller - `GameScene`,
+/// `SectionScreen`, or anything else - can trigger an effect by name.
 object AudioManager {
     private lateinit var context: Context
     private val handler = Handler(Looper.getMainLooper())
@@ -52,11 +55,8 @@ object AudioManager {
     private lateinit var soundPool: SoundPool
     private val soundIds = mutableMapOf<String, Int>()
 
-    private val effectNames = listOf(
-        "BacteriaFall_1sec", "Explosion1", "Explosion2Loud", "PillX2", "PillsFalling1Sec",
-        "ShowHint", "Siren1_2secs", "Siren2_2secs", "Squelch_Tile1", "StarryEffect1A_UpBeat",
-        "SwapPillError1", "Swap_Pill1A",
-    )
+    /// Every numbered `audio2/*.wav` the `playSound` table can resolve to.
+    private val effectFiles = listOf("1", "2", "3", "4", "5", "7", "10", "13", "16", "26", "Hint")
 
     fun init(context: Context) {
         this.context = context.applicationContext
@@ -66,16 +66,43 @@ object AudioManager {
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
         soundPool = SoundPool.Builder().setMaxStreams(8).setAudioAttributes(attributes).build()
-        for (name in effectNames) {
-            this.context.assets.openFd("audio/$name.wav").use { fd ->
-                soundIds[name] = soundPool.load(fd, 1)
+        for (file in effectFiles) {
+            this.context.assets.openFd("audio2/$file.wav").use { fd ->
+                soundIds[file] = soundPool.load(fd, 1)
             }
         }
     }
 
+    fun areSoundsOn(): Boolean = isSoundEffectsEnabled
+
+    /// Plays a short one-shot sound effect, looked up by logical name rather
+    /// than the numbered `.wav` file backing it in `audio2/` - callers
+    /// shouldn't need to know which number means what.
     fun playSound(name: String) {
         if (!isSoundEffectsEnabled) return
-        val id = soundIds[name] ?: return
+
+        val fileName = when (name) {
+            "Matching" -> if (Random.nextBoolean()) {
+                if (Random.nextBoolean()) "1" else "2"
+            } else {
+                if (Random.nextBoolean()) "3" else "16"
+            }
+            "NoSwap" -> "4"
+            "ShowHint" -> "Hint"
+            "Objective" -> "26" // 27
+            "BacteriaFall_1sec" -> "10" // 10///, 11//, 22///, 25///
+            "Squelch_Tile1" -> "13" // 13//,
+            "Explosion2Loud" -> "7" // 7//, 17/// 20///, 23///
+            "Menu1" -> "5" // 5///, 6//, 9// 24///
+            else -> ""
+        }
+
+        if (fileName.isEmpty()) {
+            Log.d("AudioManager", "Missing SFX: $name")
+            return
+        }
+
+        val id = soundIds[fileName] ?: return
         soundPool.play(id, 1f, 1f, 1, 0, 1f)
     }
 
