@@ -71,10 +71,20 @@ class BackgroundNode(level: Level) : SpriteNode() {
     }
 }
 
-/// The spinning sunburst backdrop shown behind the win card, replacing the normal
-/// panning `BackgroundNode`. iOS blurs it live with a `CIGaussianBlur`; since a
-/// Gaussian blur is rotation-invariant, blurring the texture once up front (by
-/// downsampling and letting bilinear upscaling smooth it) gives the same look.
+/// iOS blurs the win/lose backdrops live with a `CIGaussianBlur`; since the
+/// blur doesn't depend on the backdrop's rotation/warp, blurring the texture
+/// once up front (by downsampling and letting bilinear upscaling smooth it)
+/// gives the same look.
+private fun blurred(texture: Texture): Texture {
+    var bitmap = texture.bitmap
+    repeat(2) {
+        bitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
+    }
+    return Texture(bitmap)
+}
+
+/// The spinning sunburst backdrop shown behind the win card, replacing the
+/// normal panning `BackgroundNode`.
 class WinBackgroundNode : Node() {
     private val sprite = SpriteNode(blurred(Textures.image("bkgwin")))
 
@@ -90,13 +100,51 @@ class WinBackgroundNode : Node() {
         val diagonal = sqrt(width * width + height * height)
         sprite.setSize(diagonal, diagonal)
     }
+}
 
-    private fun blurred(texture: Texture): Texture {
-        var bitmap = texture.bitmap
-        repeat(2) {
-            bitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
+/// The wobbling backdrop shown behind the lose card, replacing the normal
+/// panning `BackgroundNode` - uses the "bkglose" art, continuously distorted at
+/// its four corners the same way `BoardNode` wobbles bacteria tiles (see
+/// `BoardNode.updateBacteriaWobble`).
+class LoseBackgroundNode : Node() {
+    companion object {
+        /// Amplitude of each corner's displacement, as a fraction of the
+        /// sprite's own size - mirrors `BoardNode`'s bacteria wobble.
+        private const val WOBBLE_AMPLITUDE = 0.07
+        /// Each corner advances at its own rate (radians/sec) so the four
+        /// corners never move in lockstep.
+        private const val WOBBLE_TL = 2.408
+        private const val WOBBLE_TR = 2.304
+        private const val WOBBLE_BL = 2.513
+        private const val WOBBLE_BR = 2.723
+    }
+
+    private val sprite = SpriteNode(blurred(Textures.image("bkglose")))
+    private val warp = FloatArray(8)
+
+    init {
+        addChild(sprite)
+        sprite.warp = warp
+        update(0.0)
+    }
+
+    fun layout(width: Float, height: Float) {
+        // Oversize a little so the wobble's corner displacement never pulls an
+        // edge in far enough to reveal whatever sits behind this node.
+        val margin = (1 + WOBBLE_AMPLITUDE * 2).toFloat()
+        sprite.setSize(width * margin, height * margin)
+    }
+
+    fun update(elapsedTime: Double) {
+        // SpriteKit's offsets are y-up; flip them for the y-down canvas.
+        fun set(i: Int, baseX: Float, baseY: Float, rate: Double) {
+            warp[i * 2] = baseX + (WOBBLE_AMPLITUDE * sin(rate * elapsedTime)).toFloat()
+            warp[i * 2 + 1] = baseY - (WOBBLE_AMPLITUDE * cos(rate * elapsedTime)).toFloat()
         }
-        return Texture(bitmap)
+        set(0, 0f, 0f, WOBBLE_TL)
+        set(1, 1f, 0f, WOBBLE_TR)
+        set(2, 0f, 1f, WOBBLE_BL)
+        set(3, 1f, 1f, WOBBLE_BR)
     }
 }
 
@@ -331,7 +379,9 @@ class WinOverlayNode(private val dp: Float) : Node() {
 
 /// Full-screen "lose" overlay: darkens the screen behind a lose card with a
 /// Continue button that returns to level select and a Restart button that
-/// replays the level.
+/// replays the level. The wobbling `LoseBackgroundNode` backdrop (which
+/// `GameScene` positions separately, behind the board) swaps in as soon as the
+/// loss happens, mirroring the win backdrop.
 class LoseOverlayNode(private val dp: Float) : Node() {
     private val dimOverlay = SpriteNode(color = DIM)
     private val title = titleLabel("Unlucky!", 80 * dp)

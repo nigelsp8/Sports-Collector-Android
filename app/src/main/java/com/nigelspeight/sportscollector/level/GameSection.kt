@@ -51,6 +51,12 @@ sealed interface LevelListRow {
     data object GameCompleted : LevelListRow
     data object ComingSoon : LevelListRow
     data class Locked(val previousSection: GameSection) : LevelListRow
+
+    /// Whether this row actually represents a playable level (`NextLevel` or
+    /// `Won`) as opposed to one of the section-boundary filler cards - used by
+    /// `SectionScreen` to decide whether any level is showing in the list at all.
+    val isLevelRow: Boolean
+        get() = this is NextLevel || this is Won
 }
 
 object SectionRows {

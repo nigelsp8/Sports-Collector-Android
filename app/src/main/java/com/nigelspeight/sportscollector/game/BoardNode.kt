@@ -53,6 +53,16 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         private const val WOBBLE_TR = 2.304
         private const val WOBBLE_BL = 2.513
         private const val WOBBLE_BR = 2.723
+
+        /// Base zPosition tiles sit at, nudged per-row (see `tileZPosition`) so a
+        /// vertical wall's tall post - which visually stands up out of its own
+        /// row, see `wall-vertical.png` - can be slotted in between two rows'
+        /// worth of tiles instead of always sitting flatly above or below every tile.
+        private const val TILE_BASE_Z = 5f
+        /// Deliberately tiny: only needs to separate adjacent rows' tiles (and the
+        /// half-row-offset walls between them, see `addWall`), never to compete
+        /// with the other zPosition bands (selection highlight at 10, etc).
+        private const val TILE_ROW_Z_STEP = 0.01f
     }
 
     var cellSize = 0f
@@ -63,7 +73,9 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
 
     private val boardLayer = Node()
     private val jellyLayer = Node()
-    private val wallLayer = Node()
+    /// Holds walls as well as tiles: Android only sorts zPosition among
+    /// siblings (unlike SpriteKit's global sort), so walls must share the
+    /// tiles' parent to interleave with them row by row.
     private val tileLayer = Node()
     private val selectionLayer = Node()
 
@@ -86,7 +98,6 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
     init {
         addChild(boardLayer)
         addChild(jellyLayer)
-        addChild(wallLayer)
         addChild(tileLayer)
         selectionLayer.addChild(selectionHighlight)
         addChild(selectionLayer)
@@ -104,7 +115,7 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         boardLayer.removeAllChildren()
         gridTileNodes.clear()
         jellyLayer.removeAllChildren()
-        wallLayer.removeAllChildren()
+        wallNodes.values.forEach { it.removeFromParent() }
         wallNodes.clear()
         val previousJellyPoints = jellyNodes.keys.toSet()
         jellyNodes.clear()
@@ -230,18 +241,27 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
     private fun wallKey(point: GridPoint, horizontal: Boolean) =
         "${point.row},${point.col},${if (horizontal) "b" else "r"}"
 
+    /// A tile's zPosition within its row's "slot" - see `TILE_BASE_Z`/`TILE_ROW_Z_STEP`.
+    private fun tileZPosition(row: Int): Float = TILE_BASE_Z + row * TILE_ROW_Z_STEP
+
     private fun addWall(gp: GridPoint, horizontal: Boolean) {
         val node = SpriteNode(if (horizontal) Textures.wallHorizontal else Textures.wallVertical)
         val (cx, cy) = point(gp)
         if (horizontal) {
-            node.setSize(cellSize * 0.9f, cellSize * 0.3f)
+            node.setSize(cellSize * 0.9f, cellSize * 0.4f)
             node.setPosition(cx, cy + cellSize / 2)
+            // Above this row's tiles, below the next row's.
+            node.zPosition = tileZPosition(gp.row) + TILE_ROW_Z_STEP / 2
         } else {
-            node.setSize(cellSize * 0.3f, cellSize * 0.9f)
+            node.setSize(cellSize * 0.2f, cellSize * 0.9f)
             node.setPosition(cx + cellSize / 2, cy)
+            // Sits exactly halfway into the tile-zPosition slot above this wall's
+            // own row, so a tile in the row above (further from the viewer,
+            // behind the post) renders behind this wall, while a tile in this
+            // row or below (in front of/level with the post's base) renders above it.
+            node.zPosition = tileZPosition(gp.row) - TILE_ROW_Z_STEP / 2
         }
-        node.zPosition = 3f
-        wallLayer.addChild(node)
+        tileLayer.addChild(node)
         wallNodes[wallKey(gp, horizontal)] = node
     }
 
@@ -273,6 +293,8 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         val nodeB = tileNodes[b] ?: return
         tileNodes[a] = nodeB
         tileNodes[b] = nodeA
+        nodeA.zPosition = tileZPosition(b.row)
+        nodeB.zPosition = tileZPosition(a.row)
         val duration = SWAP_DURATION * animationSpeedMultiplier
         val (bx, by) = point(b)
         val (ax, ay) = point(a)
@@ -287,7 +309,7 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         val node = TileSpriteNode(Textures.tile(type))
         node.tileType = type
         node.setSize(cellSize * 0.88f, cellSize * 0.88f)
-        node.zPosition = 5f
+        node.zPosition = tileZPosition(gp.row)
         node.alpha = 0f
         val (tx, ty) = point(gp)
         node.setPosition(tx, if (droppingInFromAbove) ty - cellSize * 3 else ty)
@@ -305,6 +327,7 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         // Defensive: never silently orphan a node already tracked at the destination.
         if (to != from) removeTile(to)
         tileNodes[to] = node
+        node.zPosition = tileZPosition(to.row)
         val (tx, ty) = point(to)
         // Eased in (starts slow, speeds up) so a multi-row fall reads as gravity accelerating.
         node.run(Action.moveTo(tx, ty, duration * animationSpeedMultiplier, Timing.EASE_IN), MOVE_ACTION_KEY)

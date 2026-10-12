@@ -46,6 +46,16 @@ class HUDNode(private val dp: Float) : Node() {
     private var objectivesRowY = 0f
     private val pauseButton = SpriteNode(Textures.image("pausebutton"))
 
+    /// The level/score/moves badges, grouped so `show()` can slide and fade
+    /// them in together from above the screen.
+    private val topZone = Node()
+    /// The gamebar backdrop, pause button and objective icons, grouped so
+    /// `show()` can slide and fade them in together from below the screen.
+    private val bottomZone = Node()
+    /// Latest height passed to `layout` - `show()` needs it to know how far
+    /// off-screen to start `topZone`/`bottomZone` before sliding them in.
+    private var currentHeight = 0f
+
     /// Debug aid: a tappable button (see `GameScene.cycleDebugSpeed`) that cycles
     /// the falling/animation speed so a human can watch cascades step by step.
     /// Visible, matching the current iOS build - set `SHOW_SPEED_BUTTON` false to hide.
@@ -69,11 +79,11 @@ class HUDNode(private val dp: Float) : Node() {
 
     init {
         gamebar.zPosition = 0f
-        addChild(gamebar)
+        bottomZone.addChild(gamebar)
 
         for (badge in listOf(levelBadge, scoreBadge, movesBadge)) {
             badge.zPosition = 1f
-            addChild(badge)
+            topZone.addChild(badge)
         }
 
         levelCaptionLabel.text = "LEVEL"
@@ -87,7 +97,7 @@ class HUDNode(private val dp: Float) : Node() {
         for (label in listOf(levelCaptionLabel, levelValueLabel, scoreValueLabel, movesCaptionLabel, movesValueLabel)) {
             label.vAlign = LabelNode.VAlign.CENTER
             label.zPosition = 2f
-            addChild(label)
+            topZone.addChild(label)
         }
         levelCaptionLabel.hAlign = LabelNode.HAlign.LEFT
         levelValueLabel.hAlign = LabelNode.HAlign.RIGHT
@@ -96,10 +106,17 @@ class HUDNode(private val dp: Float) : Node() {
         scoreValueLabel.hAlign = LabelNode.HAlign.CENTER
 
         objectivesContainer.zPosition = 2f
-        addChild(objectivesContainer)
+        bottomZone.addChild(objectivesContainer)
 
         pauseButton.zPosition = 3f
-        addChild(pauseButton)
+        bottomZone.addChild(pauseButton)
+
+        // Hidden until `show()` runs, once the objectives overlay's Continue
+        // button is tapped - see `GameScene`.
+        topZone.alpha = 0f
+        bottomZone.alpha = 0f
+        addChild(topZone)
+        addChild(bottomZone)
 
         speedButtonBackground.fillColor = 0x59000000
         speedButtonBackground.strokeColor = 0x80FFFFFF.toInt()
@@ -116,6 +133,7 @@ class HUDNode(private val dp: Float) : Node() {
     }
 
     fun layout(width: Float, height: Float) {
+        currentHeight = height
         val barWidth = width * 0.9f
         val halfScreen = width * 0.5f
 
@@ -167,6 +185,21 @@ class HUDNode(private val dp: Float) : Node() {
         speedLabel.setPosition(0f, bottom)
     }
 
+    /// Slides `topZone` in from above the screen and `bottomZone` in from below,
+    /// fading both in at the same time - called once the objectives overlay's
+    /// Continue button is tapped (see `GameScene`). Both zones start fully
+    /// transparent from `init`, so this is safe to call exactly once per level.
+    fun show() {
+        val slideDistance = max(currentHeight, 1f)
+        topZone.setPosition(0f, -slideDistance)
+        bottomZone.setPosition(0f, slideDistance)
+
+        val duration = 0.4
+        for (zone in listOf(topZone, bottomZone)) {
+            zone.run(Action.group(Action.fadeIn(duration), Action.moveTo(0f, 0f, duration, Timing.EASE_OUT)))
+        }
+    }
+
     /// Updates the debug speed button's text. See `GameScene.cycleDebugSpeed`.
     fun setSpeedText(text: String) {
         speedLabel.text = text
@@ -176,7 +209,10 @@ class HUDNode(private val dp: Float) : Node() {
     fun containsSpeedToggle(px: Float, py: Float): Boolean = speedButtonBackground.contains(px, py)
 
     /// Hit test for the pause button, in this node's own coordinate space.
-    fun containsPauseToggle(px: Float, py: Float): Boolean = pauseButton.contains(px, py)
+    /// `pauseButton` lives under `bottomZone`, which slides during `show()`, so
+    /// the point is shifted into that zone's space first.
+    fun containsPauseToggle(px: Float, py: Float): Boolean =
+        pauseButton.contains(px - bottomZone.x, py - bottomZone.y)
 
     /// Direct scale set, not an animated action: the scene stops evaluating
     /// actions while paused, so a tween here would freeze mid-flight.

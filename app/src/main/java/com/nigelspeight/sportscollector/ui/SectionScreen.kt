@@ -54,6 +54,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -151,7 +153,15 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
                 ArrowButton(left = true, visible = section.previousSection != null, onClick = ::previous)
                 Spacer(Modifier.width(16.dp))
                 Crossfade(targetState = section, animationSpec = tween(250), label = "card") { shown ->
-                    SectionCard(shown, Modifier.width(cardWidth))
+                    // No playable level is showing in the list below (just a
+                    // filler card like `Locked`/`ComingSoon`) - show the summary
+                    // card desaturated so it reads as not-yet-available, leaving
+                    // the level cards themselves (and the full-screen background)
+                    // untouched.
+                    val noLevelShowing = remember(shown) {
+                        SectionRows.build(shown, AppServices.progress::bestResult, ::objectiveKinds).none { it.isLevelRow }
+                    }
+                    SectionCard(shown, greyscale = noLevelShowing, Modifier.width(cardWidth))
                 }
                 Spacer(Modifier.width(16.dp))
                 ArrowButton(left = false, visible = section.nextSection != null, onClick = ::next)
@@ -209,7 +219,7 @@ private val sectionArtCache = LruCache<GameSection, ImageBitmap>(3)
 
 /// A section's background art, decoded off the main thread.
 @Composable
-private fun SectionImage(section: GameSection, modifier: Modifier) {
+private fun SectionImage(section: GameSection, modifier: Modifier, colorFilter: ColorFilter? = null) {
     val bitmap by produceState(sectionArtCache.get(section), section) {
         if (value == null) {
             value = withContext(Dispatchers.IO) {
@@ -219,11 +229,18 @@ private fun SectionImage(section: GameSection, modifier: Modifier) {
             }
         }
     }
-    bitmap?.let { Image(it, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop) }
+    bitmap?.let {
+        Image(it, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop, colorFilter = colorFilter)
+    }
 }
 
+/// Desaturates the section art (the Compose equivalent of iOS's
+/// `CIColorControls` with zero saturation), applied at draw time so no separate
+/// greyscale bitmap needs generating or caching.
+private val greyscaleFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+
 @Composable
-private fun SectionCard(section: GameSection, modifier: Modifier) {
+private fun SectionCard(section: GameSection, greyscale: Boolean, modifier: Modifier) {
     Column(
         modifier = modifier
             .aspectRatio(600f / 880f)
@@ -241,6 +258,7 @@ private fun SectionCard(section: GameSection, modifier: Modifier) {
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(12.dp)),
+            colorFilter = if (greyscale) greyscaleFilter else null,
         )
     }
 }

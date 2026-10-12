@@ -109,7 +109,11 @@ object Textures {
             val cell = base.width / 8
             val col = frame % 8
             val row = frame / 8
-            Texture(base, Rect(col * cell, row * cell, (col + 1) * cell, (row + 1) * cell))
+            // Inset each frame slightly so bilinear filtering never samples the
+            // neighbouring frame's edge pixels (iOS insets by 1/256 of a frame,
+            // i.e. half a pixel; integer source rects round that up to one).
+            val inset = 1
+            Texture(base, Rect(col * cell + inset, row * cell + inset, (col + 1) * cell - inset, (row + 1) * cell - inset))
         }
     }
 

@@ -31,6 +31,9 @@ class GameScene(
     /// (and given the same z slot as `background`) so it renders behind the board.
     private val winBackground = WinBackgroundNode()
     private val loseOverlay = LoseOverlayNode(dp)
+    /// The lose screen's spinning backdrop - kept separate from `loseOverlay`
+    /// (and given the same z slot as `background`) so it renders behind the board.
+    private val loseBackground = LoseBackgroundNode()
     private val objectivesOverlay = ObjectivesOverlayNode(dp)
     private val pauseOverlay = PauseOverlayNode(dp)
 
@@ -99,6 +102,9 @@ class GameScene(
         winBackground.zPosition = -100f
         winBackground.isHidden = true
         addChild(winBackground)
+        loseBackground.zPosition = -100f
+        loseBackground.isHidden = true
+        addChild(loseBackground)
         addChild(boardNode)
         addChild(hud)
         addChild(banner)
@@ -127,6 +133,7 @@ class GameScene(
         val area = safeArea
         background.layout(area.screenWidth, area.screenHeight)
         winBackground.layout(area.screenWidth, area.screenHeight)
+        loseBackground.layout(area.screenWidth, area.screenHeight)
         boardNode.layout(area.width * 0.92f, area.height * 0.72f)
         boardNode.setPosition(area.centerX, area.centerY)
         hud.layout(area.width, area.height)
@@ -169,6 +176,7 @@ class GameScene(
         }
 
         background.update(animationTime)
+        loseBackground.update(animationTime)
         boardNode.updateBacteriaWobble(animationTime)
 
         // Captured before `advance()` mutates `engine.objectives`, so the batch
@@ -424,6 +432,11 @@ class GameScene(
             }
 
             GameEvent.Lost -> {
+                // The wobbling lose backdrop swaps in immediately, mirroring the
+                // win backdrop above - only the overlay itself waits for the
+                // board to settle, via the pending-outcome check in `update`.
+                background.isHidden = true
+                loseBackground.isHidden = false
                 pendingLose = true
                 pendingOutcomeAt = lastFallEventTime ?: animationTime
             }
@@ -495,6 +508,7 @@ class GameScene(
             } else if (objectivesOverlay.containsContinueButton(x - objectivesOverlay.x, y - objectivesOverlay.y)) {
                 playSound("Menu1")
                 objectivesOverlay.hide()
+                hud.show()
             }
             return
         }
