@@ -57,6 +57,15 @@ object AppServices {
 class LevelProgressStore(private val prefs: SharedPreferences) {
     data class Result(val score: Int, val stars: Int)
 
+    /// The `mapID` of the most recently played level, so the app can resume on
+    /// the right section at next launch. `null` if no level has been played yet.
+    val lastPlayedMapID: Int?
+        get() = prefs.getInt(LAST_PLAYED_MAP_ID_KEY, 0).takeIf { it != 0 }
+
+    fun recordLastPlayedMapID(mapID: Int) {
+        prefs.edit().putInt(LAST_PLAYED_MAP_ID_KEY, mapID).apply()
+    }
+
     fun bestResult(mapNumber: Int): Result? {
         val key = key(mapNumber)
         if (!prefs.contains("$key.score") || !prefs.contains("$key.stars")) return null
@@ -85,5 +94,6 @@ class LevelProgressStore(private val prefs: SharedPreferences) {
 
     private companion object {
         const val KEY_PREFIX = "levelProgress."
+        const val LAST_PLAYED_MAP_ID_KEY = KEY_PREFIX + "lastPlayedMapID"
     }
 }

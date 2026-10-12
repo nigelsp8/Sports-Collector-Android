@@ -12,11 +12,11 @@ enum class GameSection(
     /// Name of the section's icon in the tile atlas (`assets/images/pills`).
     val iconTextureName: String,
 ) {
-    SOCCER("Soccer", "bkg1b", "soccerballcoloured"),
+    SOCCER("Soccer", "bkg1b", "goalkeepernet"),
     ICE_HOCKEY("Ice Hockey", "bkg2b", "hockeypuck"),
-    BOXING("Boxing", "bkg3b", "boxingglove"),
+    BOXING("Boxing", "bkg3b", "boxingglovepurple"),
     TENNIS("Tennis", "bkg4b", "tennisracquet"),
-    BASKETBALL("Basketball", "bkg5b", "basketball"),
+    BASKETBALL("Basketball", "bkg5b", "basketballhoop"),
     RUGBY("Rugby", "bkg6b", "rugbyball");
 
     val levelCountText: String get() = "20 Levels"
@@ -37,6 +37,12 @@ enum class GameSection(
 
     val previousSection: GameSection? get() = entries.getOrNull(ordinal - 1)
     val nextSection: GameSection? get() = entries.getOrNull(ordinal + 1)
+
+    companion object {
+        /// The section a given `mapID` (1-120) belongs to - the inverse of
+        /// `levelRange`.
+        fun forMapID(mapID: Int): GameSection? = entries.getOrNull((mapID - 1) / 20)
+    }
 }
 
 /// One row in the section screen's level list: either a playable level, or one
@@ -60,6 +66,24 @@ sealed interface LevelListRow {
 }
 
 object SectionRows {
+    /// Section to land on at launch: wherever the player last played, falling
+    /// back to their progress frontier (the earliest section with an unplayed
+    /// level) if nothing's been recorded yet - e.g. a fresh install, or
+    /// upgrading from a build that predates this tracking.
+    fun resumeSection(lastPlayedMapID: Int?, bestResult: (Int) -> LevelProgressStore.Result?): GameSection =
+        lastPlayedMapID?.let(GameSection::forMapID) ?: frontierSection(bestResult)
+
+    /// Earliest playable section that isn't fully won yet. If every playable
+    /// section is complete (or none exist yet), lands on the last playable one
+    /// so the user sees its "advance"/"completed" card.
+    fun frontierSection(bestResult: (Int) -> LevelProgressStore.Result?): GameSection {
+        for (section in GameSection.entries) {
+            if (!section.hasPlayableLevels) break
+            if (wonCount(section, bestResult) < section.levelRange.count()) return section
+        }
+        return GameSection.entries.lastOrNull { it.hasPlayableLevels } ?: GameSection.SOCCER
+    }
+
     /// Number of consecutive wins from the start of `section`'s range - the
     /// player's progress frontier, since levels are meant to be played in order
     /// (a count equal to the full range means the section is fully complete).

@@ -68,6 +68,21 @@ class SectionRowsTests {
         assertEquals(listOf(LevelListRow.ComingSoon), rows)
     }
 
+    @Test fun resumesOnLastPlayedLevelsSection() {
+        assertEquals(GameSection.forMapID(1), GameSection.SOCCER)
+        assertEquals(GameSection.forMapID(20), GameSection.SOCCER)
+        assertEquals(GameSection.forMapID(21), GameSection.ICE_HOCKEY)
+        assertEquals(GameSection.TENNIS, SectionRows.resumeSection(lastPlayedMapID = 65, bestResult = progress()))
+    }
+
+    @Test fun withNothingPlayedResumesAtTheProgressFrontier() {
+        assertEquals(GameSection.SOCCER, SectionRows.resumeSection(null, progress()))
+        val soccerDone = (1..20).toList().toIntArray()
+        assertEquals(GameSection.ICE_HOCKEY, SectionRows.resumeSection(null, progress(*soccerDone)))
+        val everythingDone = (1..100).toList().toIntArray()
+        assertEquals(GameSection.BASKETBALL, SectionRows.resumeSection(null, progress(*everythingDone)))
+    }
+
     @Test fun nextLevelCarriesThatLevelsObjectives() {
         val rows = SectionRows.build(GameSection.SOCCER, progress()) { mapID ->
             Objective.objectivesFor(loadBundledLevel(mapID)).map { it.kind }

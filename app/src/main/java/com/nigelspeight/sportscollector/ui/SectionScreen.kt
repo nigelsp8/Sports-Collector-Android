@@ -84,7 +84,9 @@ import kotlin.math.min
 /// Which section the carousel is showing - held outside composition so it
 /// survives a round trip into a level and back.
 class SectionScreenState {
-    var section by mutableStateOf(GameSection.SOCCER)
+    var section by mutableStateOf(
+        SectionRows.resumeSection(AppServices.progress.lastPlayedMapID, AppServices.progress::bestResult),
+    )
 }
 
 /// User-facing landing screen: a full-screen themed background behind a single
@@ -178,10 +180,12 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
                         when (row) {
                             is LevelListRow.NextLevel -> {
                                 AudioManager.playSound("Menu1")
+                                AppServices.progress.recordLastPlayedMapID(row.mapID)
                                 onPlay(row.mapID)
                             }
                             is LevelListRow.Won -> {
                                 AudioManager.playSound("Menu1")
+                                AppServices.progress.recordLastPlayedMapID(row.mapID)
                                 onPlay(row.mapID)
                             }
                             is LevelListRow.AdvanceToNextSection -> {

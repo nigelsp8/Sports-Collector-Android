@@ -312,7 +312,7 @@ class BoardNode(val level: Level, private val dp: Float) : Node() {
         node.zPosition = tileZPosition(gp.row)
         node.alpha = 0f
         val (tx, ty) = point(gp)
-        node.setPosition(tx, if (droppingInFromAbove) ty - cellSize * 3 else ty)
+        node.setPosition(tx, if (droppingInFromAbove) ty - cellSize else ty)
         tileLayer.addChild(node)
         tileNodes[gp] = node
         node.run(Action.fadeIn(SPAWN_FADE_DURATION * animationSpeedMultiplier), SCALE_ACTION_KEY)
