@@ -86,7 +86,7 @@ private fun blurred(texture: Texture): Texture {
 /// The spinning sunburst backdrop shown behind the win card, replacing the
 /// normal panning `BackgroundNode`.
 class WinBackgroundNode : Node() {
-    private val sprite = SpriteNode(blurred(Textures.image("bkgwin")))
+    private val sprite = SpriteNode(blurred(Textures.uncachedImage("bkgwin")))
 
     init {
         addChild(sprite)
@@ -119,7 +119,7 @@ class LoseBackgroundNode : Node() {
         private const val WOBBLE_BR = 2.723
     }
 
-    private val sprite = SpriteNode(blurred(Textures.image("bkglose")))
+    private val sprite = SpriteNode(blurred(Textures.uncachedImage("bkglose")))
     private val warp = FloatArray(8)
 
     init {
@@ -363,6 +363,7 @@ class WinOverlayNode(private val dp: Float) : Node() {
             starsImage.setScale(1.6f)
             starsImage.texture = Textures.image("starsx${min(stars, 3)}")
             starsImage.run(Action.group(Action.fadeIn(0.3), Action.scaleTo(1f, 0.3, Timing.EASE_OUT)))
+            AudioManager.playSound("WinStars")
         }
 
         for (button in listOf(continueButton, restartButton)) {

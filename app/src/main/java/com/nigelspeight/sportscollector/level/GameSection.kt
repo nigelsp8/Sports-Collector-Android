@@ -7,32 +7,31 @@ import com.nigelspeight.sportscollector.engine.ObjectiveKind
 enum class GameSection(
     val displayName: String,
     /// Same art used (at full opacity) on the card, and (at 30% alpha) as the
-    /// full-screen background - the level backgrounds `BackgroundNode` uses.
+    /// full-screen background on the section screen.
     val backgroundImageName: String,
     /// Name of the section's icon in the tile atlas (`assets/images/pills`).
     val iconTextureName: String,
 ) {
-    SOCCER("Soccer", "bkg1b", "goalkeepernet"),
-    ICE_HOCKEY("Ice Hockey", "bkg2b", "hockeypuck"),
-    BOXING("Boxing", "bkg3b", "boxingglovepurple"),
-    TENNIS("Tennis", "bkg4b", "tennisracquet"),
-    BASKETBALL("Basketball", "bkg5b", "basketballhoop"),
-    RUGBY("Rugby", "bkg6b", "rugbyball");
+    SOCCER("Soccer", "bkg1", "goalkeepernet"),
+    ICE_HOCKEY("Ice Hockey", "bkg2", "hockeypuck"),
+    BOXING("Boxing", "bkg3", "boxingglovepurple"),
+    TENNIS("Tennis", "bkg4", "tennisracquet"),
+    BASKETBALL("Basketball", "bkg5", "basketballhoop"),
+    RUGBY("Rugby", "bkg6", "rugbyball");
 
     val levelCountText: String get() = "20 Levels"
 
     /// 20 levels per section, laid out in section order - map IDs 1-20 are
-    /// Soccer, 21-40 Ice Hockey, and so on through Rugby at 101-120 (that last
-    /// range doesn't have levels yet - see `hasPlayableLevels`).
+    /// Soccer, 21-40 Ice Hockey, and so on through Rugby at 101-120.
     val levelRange: IntRange
         get() {
             val start = ordinal * 20 + 1
             return start..(start + 19)
         }
 
-    /// Whether this section's level files actually exist yet. Only
-    /// `LevelOrder.LEVEL_COUNT` levels have been created so far, so a section
-    /// whose range starts beyond that (currently just Rugby) has none to show.
+    /// Whether this section's level files actually exist yet - guards against
+    /// a section whose range starts beyond `LevelOrder.LEVEL_COUNT` (relevant
+    /// again whenever new sections are added ahead of their levels).
     val hasPlayableLevels: Boolean get() = levelRange.first <= LevelOrder.LEVEL_COUNT
 
     val previousSection: GameSection? get() = entries.getOrNull(ordinal - 1)

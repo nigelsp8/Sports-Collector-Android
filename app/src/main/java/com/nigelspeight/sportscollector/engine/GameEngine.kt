@@ -319,6 +319,7 @@ class GameEngine(
             if (downgraded != null) {
                 board.mutate(point) { it.copy(tile = downgraded) }
                 pendingEvents += GameEvent.ComboPillDowngraded(point, tile, downgraded)
+                damageAdjacentSolids(point)
             } else {
                 pointsToRemove += point
             }

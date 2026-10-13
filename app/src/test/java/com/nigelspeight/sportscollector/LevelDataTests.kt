@@ -23,9 +23,9 @@ import org.junit.rules.TemporaryFolder
 
 private fun gp(row: Int, col: Int) = GridPoint(row, col)
 
-/// Sweeps every one of the 100 bundled level files to catch data-shape edge cases.
+/// Sweeps every one of the 120 bundled level files to catch data-shape edge cases.
 class AllLevelsTests {
-    private val allLevelIDs = 1..100
+    private val allLevelIDs = 1..120
 
     @Test fun everyLevelDecodesWithSaneShape() {
         for (id in allLevelIDs) {
@@ -139,7 +139,7 @@ class LevelGeometryTests {
 /// Round-trips every bundled level through `LevelEncoder` and back.
 class LevelEncoderTests {
     @Test fun roundTripPreservesEveryCellAndObjective() {
-        for (id in 1..100) {
+        for (id in 1..120) {
             val original = loadBundledLevel(id)
             val roundTripped = LevelLoader.decodeLevel(LevelEncoder.encode(original), id)
 

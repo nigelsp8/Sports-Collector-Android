@@ -274,6 +274,22 @@ class ComboPillTests {
         assertEquals(750, engine.score) // only the 2 plain tablets were removed
         assertFalse(events.any { it is GameEvent.TileRemoved && it.point == downgradedPoint })
     }
+
+    @Test fun downgradedComboPillDamagesAdjacentSolids() {
+        val level = TestLevel.make(rows = listOf(
+            listOf(s(ORANGE_TABLET), s(ORANGE_TABLET), s(YELLOW_TABLET), s(ORANGE_BLUE_PILL)),
+            listOf(s(PINK_TABLET), s(YELLOW_TABLET), s(SOLID_STAGE_1), s(PINK_TABLET)),
+        ))
+        val engine = GameEngine(level)
+        runUntilSettled(engine)
+
+        // Same swap as above: the pill lands at (0,2), directly above the solid,
+        // and downgrades rather than being removed - it should still damage it.
+        assertTrue(engine.attemptSwap(gp(0, 2), gp(0, 3)))
+        val events = runUntilSettled(engine)
+
+        assertTrue(GameEvent.SolidDamaged(gp(1, 2), SOLID_STAGE_1, SOLID_STAGE_2) in events)
+    }
 }
 
 class WallTests {

@@ -99,7 +99,7 @@ data class EditableLevel(
 /// Maps a 1-based map slot (what the player sees as "Level N") to the bundled
 /// level file number that slot plays.
 object LevelOrder {
-    const val LEVEL_COUNT = 100
+    const val LEVEL_COUNT = 120
 
     val order: IntArray = intArrayOf(
         0, // not actually used
@@ -113,6 +113,8 @@ object LevelOrder {
         53, 37, 13, 87, 18, 9, 31, 3, 42, 54,
         83, 67, 39, 81, 64, 29, 59, 70, 58, 5,
         91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+        101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+        111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
         -1,
     )
 

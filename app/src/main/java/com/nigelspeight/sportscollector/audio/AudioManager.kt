@@ -56,7 +56,7 @@ object AudioManager {
     private val soundIds = mutableMapOf<String, Int>()
 
     /// Every numbered `audio2/*.wav` the `playSound` table can resolve to.
-    private val effectFiles = listOf("1", "2", "3", "4", "5", "7", "10", "13", "16", "26", "Hint")
+    private val effectFiles = listOf("1", "2", "3", "4", "5", "7", "10", "13", "16", "26", "32", "47", "Hint")
 
     fun init(context: Context) {
         this.context = context.applicationContext
@@ -94,6 +94,8 @@ object AudioManager {
             "Squelch_Tile1" -> "13" // 13//,
             "Explosion2Loud" -> "7" // 7//, 17/// 20///, 23///
             "Menu1" -> "5" // 5///, 6//, 9// 24///
+            "PillsFalling1Sec" -> "47"
+            "WinStars" -> "32"
             else -> ""
         }
 

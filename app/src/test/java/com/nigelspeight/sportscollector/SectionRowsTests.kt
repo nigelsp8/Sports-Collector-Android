@@ -6,7 +6,6 @@ import com.nigelspeight.sportscollector.level.GameSection
 import com.nigelspeight.sportscollector.level.LevelListRow
 import com.nigelspeight.sportscollector.level.SectionRows
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,8 +19,7 @@ class SectionRowsTests {
         assertEquals(1..20, GameSection.SOCCER.levelRange)
         assertEquals(21..40, GameSection.ICE_HOCKEY.levelRange)
         assertEquals(101..120, GameSection.RUGBY.levelRange)
-        assertTrue(GameSection.BASKETBALL.hasPlayableLevels)
-        assertFalse(GameSection.RUGBY.hasPlayableLevels)
+        assertTrue(GameSection.RUGBY.hasPlayableLevels)
     }
 
     @Test fun freshGameOffersLevelOneOnly() {
@@ -63,9 +61,14 @@ class SectionRowsTests {
         assertEquals(listOf(LevelListRow.NextLevel(21, emptyList())), hockey)
     }
 
-    @Test fun rugbyIsComingSoonOnceBasketballIsDone() {
+    @Test fun rugbyOpensOnceBasketballIsDone() {
         val rows = SectionRows.build(GameSection.RUGBY, progress(*(1..100).toList().toIntArray()), noObjectives)
-        assertEquals(listOf(LevelListRow.ComingSoon), rows)
+        assertEquals(listOf(LevelListRow.NextLevel(101, emptyList())), rows)
+    }
+
+    @Test fun finishingRugbyCompletesTheGame() {
+        val rows = SectionRows.build(GameSection.RUGBY, progress(*(1..120).toList().toIntArray()), noObjectives)
+        assertEquals(LevelListRow.GameCompleted, rows.first())
     }
 
     @Test fun resumesOnLastPlayedLevelsSection() {
@@ -79,8 +82,8 @@ class SectionRowsTests {
         assertEquals(GameSection.SOCCER, SectionRows.resumeSection(null, progress()))
         val soccerDone = (1..20).toList().toIntArray()
         assertEquals(GameSection.ICE_HOCKEY, SectionRows.resumeSection(null, progress(*soccerDone)))
-        val everythingDone = (1..100).toList().toIntArray()
-        assertEquals(GameSection.BASKETBALL, SectionRows.resumeSection(null, progress(*everythingDone)))
+        val everythingDone = (1..120).toList().toIntArray()
+        assertEquals(GameSection.RUGBY, SectionRows.resumeSection(null, progress(*everythingDone)))
     }
 
     @Test fun nextLevelCarriesThatLevelsObjectives() {
