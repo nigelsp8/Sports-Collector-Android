@@ -49,6 +49,14 @@ class GameScene(
     /// return all the way to the first screen.
     var onQuit: (() -> Unit)? = null
 
+    /// Invoked specifically from the win/lose overlay's Continue/Restart buttons
+    /// (unlike `onContinue`/`onRestart`, which also fire from the pre-level
+    /// objectives overlay and the pause menu) so an interstitial ad can be shown
+    /// only at the end of a level, before the same pop/rebuild
+    /// `onContinue`/`onRestart` already do.
+    var onResultOverlayContinue: (() -> Unit)? = null
+    var onResultOverlayRestart: (() -> Unit)? = null
+
     var isPaused = false
         private set
 
@@ -515,20 +523,20 @@ class GameScene(
         if (!winOverlay.isHidden) {
             if (winOverlay.containsRestartButton(x - winOverlay.x, y - winOverlay.y)) {
                 playSound("Menu1")
-                onRestart?.invoke()
+                onResultOverlayRestart?.invoke()
             } else if (winOverlay.containsContinueButton(x - winOverlay.x, y - winOverlay.y)) {
                 playSound("Menu1")
-                onContinue?.invoke()
+                onResultOverlayContinue?.invoke()
             }
             return
         }
         if (!loseOverlay.isHidden) {
             if (loseOverlay.containsRestartButton(x - loseOverlay.x, y - loseOverlay.y)) {
                 playSound("Menu1")
-                onRestart?.invoke()
+                onResultOverlayRestart?.invoke()
             } else if (loseOverlay.containsContinueButton(x - loseOverlay.x, y - loseOverlay.y)) {
                 playSound("Menu1")
-                onContinue?.invoke()
+                onResultOverlayContinue?.invoke()
             }
             return
         }

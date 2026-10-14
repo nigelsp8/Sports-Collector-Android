@@ -1,13 +1,16 @@
 package com.nigelspeight.sportscollector.game
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Canvas
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.nigelspeight.sportscollector.ads.AdManager
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.math.min
 
@@ -73,10 +76,27 @@ class GameView(
         newScene.onQuit = onQuit
         // Deferred so the old scene finishes handling the touch that triggered it.
         newScene.onRestart = { post { presentGameScene() } }
+        // Interstitial shown here, ahead of the same pop/rebuild
+        // `onContinue`/`onRestart` already do - keeps the ad specific to ending
+        // a level rather than every use of those buttons (e.g. the pause menu's
+        // restart, or the pre-level objectives overlay).
+        newScene.onResultOverlayContinue = { showInterstitial(onContinue) }
+        newScene.onResultOverlayRestart = { showInterstitial { post { presentGameScene() } } }
         scene = newScene
         newScene.didMove()
         lastFrameNanos = 0L
         postInvalidateOnAnimation()
+    }
+
+    private fun showInterstitial(completion: () -> Unit) {
+        val activity = context.findActivity()
+        if (activity == null) completion() else AdManager.showInterstitial(activity, completion)
+    }
+
+    private tailrec fun Context.findActivity(): Activity? = when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
     }
 
     override fun onAttachedToWindow() {

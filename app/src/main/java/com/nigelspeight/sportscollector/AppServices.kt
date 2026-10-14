@@ -3,6 +3,7 @@ package com.nigelspeight.sportscollector
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import com.nigelspeight.sportscollector.ads.AdManager
 import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.game.Textures
 import com.nigelspeight.sportscollector.level.Level
@@ -10,6 +11,7 @@ import com.nigelspeight.sportscollector.level.LevelBundle
 import com.nigelspeight.sportscollector.level.LevelEditStore
 import com.nigelspeight.sportscollector.level.LevelLoader
 import com.nigelspeight.sportscollector.level.LevelOrder
+import com.nigelspeight.sportscollector.push.PushMessagingService
 import java.io.FileNotFoundException
 
 class SportsCollectorApp : Application() {
@@ -43,6 +45,8 @@ object AppServices {
         progress = LevelProgressStore(app.getSharedPreferences("progress", Context.MODE_PRIVATE))
         Textures.init(assets)
         AudioManager.init(app)
+        AdManager.start(app)
+        PushMessagingService.start(app)
     }
 
     /// `mapID` is the 1-based map slot; resolves it to its on-disk level file

@@ -1,10 +1,14 @@
 package com.nigelspeight.sportscollector
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import com.nigelspeight.sportscollector.audio.AudioManager
@@ -31,9 +35,19 @@ class MainActivity : ComponentActivity() {
     /// instead of the user-facing section carousel.
     private val launchIntoSectionScreen = true
 
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Log.d("MainActivity", "Push notification permission granted: $granted")
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Asked at launch, like iOS's `requestAuthorization`. Only needed (and
+        // only shown once, unless the player resets it) from Android 13.
+        if (savedInstanceState == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent {
             SportsCollectorTheme {
                 val root = if (launchIntoSectionScreen) Screen.Sections else Screen.LevelSelect

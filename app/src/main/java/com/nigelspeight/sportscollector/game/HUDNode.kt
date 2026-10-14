@@ -9,24 +9,37 @@ import kotlin.math.max
 /// original's `drawAtlas`-of-tile-type + `drawText`-of-amount HUD readout.
 private class ObjectiveIconNode(dp: Float) : Node() {
     val icon = SpriteNode()
-    val countLabel = LabelNode(20 * dp).apply {
+    val countLabel = LabelNode(24 * dp).apply {
         vAlign = LabelNode.VAlign.CENTER
-        hAlign = LabelNode.HAlign.LEFT
+        hAlign = LabelNode.HAlign.CENTER
         zPosition = 1f
         color = 0xFFFF0000.toInt()
         strokeColor = 0xFFFFFFFF.toInt()
-        strokeWidthPercent = 5f
+        strokeWidthPercent = 4f
+    }
+    /// Half-transparent dark copy of `countLabel`, offset just below it as a
+    /// drop shadow.
+    val countLabelShadow = LabelNode(24 * dp).apply {
+        vAlign = LabelNode.VAlign.CENTER
+        hAlign = LabelNode.HAlign.CENTER
+        zPosition = 0.99f
+        color = 0xFF000000.toInt()
+        strokeColor = 0xFF555555.toInt()
+        strokeWidthPercent = 4f
+        alpha = 0.5f
     }
     var kind: ObjectiveKind? = null
 
     init {
         icon.zPosition = 0f
         addChild(icon)
+        addChild(countLabelShadow)
         addChild(countLabel)
     }
 
     fun setCount(value: Int) {
         countLabel.text = value.toString()
+        countLabelShadow.text = value.toString()
     }
 }
 
@@ -58,12 +71,12 @@ class HUDNode(private val dp: Float) : Node() {
 
     /// Debug aid: a tappable button (see `GameScene.cycleDebugSpeed`) that cycles
     /// the falling/animation speed so a human can watch cascades step by step.
-    /// Visible, matching the current iOS build - set `SHOW_SPEED_BUTTON` false to hide.
+    /// Hidden, matching the current iOS build - set `SHOW_SPEED_BUTTON` true to show.
     private val speedButtonBackground = RoundedRectNode(160 * dp, 32 * dp, 8 * dp)
     private val speedLabel = LabelNode(14 * dp)
 
     companion object {
-        const val SHOW_SPEED_BUTTON = true
+        const val SHOW_SPEED_BUTTON = false //true
         private const val PAUSE_BUTTON_PRESSED_SCALE = 0.95f
 
         // From the iOS asset catalog's named colours (same in light and dark).
@@ -275,7 +288,8 @@ class HUDNode(private val dp: Float) : Node() {
         objectiveIconNodes.forEachIndexed { index, node ->
             node.setPosition(-left + index * spacing, -2 * dp)
             node.icon.setSize(iconSize, iconSize)
-            node.countLabel.setPosition(-28 * dp, -14 * dp)
+            node.countLabel.setPosition(0f, 20 * dp)
+            node.countLabelShadow.setPosition(0f, 22 * dp)
         }
     }
 }

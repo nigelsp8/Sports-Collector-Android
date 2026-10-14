@@ -110,7 +110,7 @@ class LoseBackgroundNode : Node() {
     companion object {
         /// Amplitude of each corner's displacement, as a fraction of the
         /// sprite's own size - mirrors `BoardNode`'s bacteria wobble.
-        private const val WOBBLE_AMPLITUDE = 0.07
+        private const val WOBBLE_AMPLITUDE = 0.007
         /// Each corner advances at its own rate (radians/sec) so the four
         /// corners never move in lockstep.
         private const val WOBBLE_TL = 2.408
