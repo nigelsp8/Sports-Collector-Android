@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "837112094605",
+    "project_id": "sports-collector",
+    "storage_bucket": "sports-collector.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:837112094605:android:a59c05eb9dfa843567e7c4",
+        "android_client_info": {
+          "package_name": "com.nigelspeight.sportscollector"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB2bSHgPpEpKDt8wjh_QcmSuRt0RHNzaM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

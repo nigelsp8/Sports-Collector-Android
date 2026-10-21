@@ -18,12 +18,14 @@ import com.nigelspeight.sportscollector.ui.GameScreen
 import com.nigelspeight.sportscollector.ui.LevelEditorScreen
 import com.nigelspeight.sportscollector.ui.LevelEditorState
 import com.nigelspeight.sportscollector.ui.LevelSelectScreen
+import com.nigelspeight.sportscollector.ui.PunditScreen
 import com.nigelspeight.sportscollector.ui.SectionScreen
 import com.nigelspeight.sportscollector.ui.SectionScreenState
 import com.nigelspeight.sportscollector.ui.theme.SportsCollectorTheme
 
 /// The app's navigation stack (the iOS `UINavigationController`).
 sealed interface Screen {
+    data object Pundit : Screen
     data object Sections : Screen
     data object LevelSelect : Screen
     data class Game(val mapID: Int, val injectedLevel: Level? = null) : Screen
@@ -50,7 +52,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             SportsCollectorTheme {
-                val root = if (launchIntoSectionScreen) Screen.Sections else Screen.LevelSelect
+                val root = if (launchIntoSectionScreen) Screen.Pundit else Screen.LevelSelect
                 val backStack = remember { mutableStateListOf(root) }
                 val sectionState = remember { SectionScreenState() }
                 fun pop() {
@@ -64,6 +66,10 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = backStack.size > 1) { pop() }
 
                 when (val screen = backStack.last()) {
+                    // Replaced rather than pushed over, so Back from the
+                    // sections leaves the app instead of returning here.
+                    Screen.Pundit -> PunditScreen(onDismiss = { backStack[0] = Screen.Sections })
+
                     Screen.Sections -> SectionScreen(
                         state = sectionState,
                         onPlay = { mapID -> backStack.add(Screen.Game(mapID)) },

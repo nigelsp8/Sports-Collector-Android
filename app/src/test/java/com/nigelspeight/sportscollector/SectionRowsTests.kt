@@ -4,6 +4,7 @@ import com.nigelspeight.sportscollector.engine.Objective
 import com.nigelspeight.sportscollector.engine.ObjectiveKind
 import com.nigelspeight.sportscollector.level.GameSection
 import com.nigelspeight.sportscollector.level.LevelListRow
+import com.nigelspeight.sportscollector.level.PunditCopy
 import com.nigelspeight.sportscollector.level.SectionRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -93,5 +94,36 @@ class SectionRowsTests {
         val expected = Objective.objectivesFor(loadBundledLevel(1)).map { it.kind }
         assertTrue(expected.isNotEmpty())
         assertEquals(LevelListRow.NextLevel(1, expected), rows[0])
+    }
+
+    @Test fun punditUsesGenericCopyBeforeAnyWin() {
+        assertEquals(
+            PunditCopy("Olivia says...", "Collect the sports cards one at a time"),
+            SectionRows.punditCopy(lastPlayedMapID = null, bestResult = progress()),
+        )
+        // Having merely played (not won) a level still counts as no progress.
+        assertEquals("Olivia says...", SectionRows.punditCopy(lastPlayedMapID = 1, bestResult = progress()).speaker)
+    }
+
+    @Test fun punditTalksAboutTheResumeSection() {
+        val soccerDone = (1..20).toList().toIntArray()
+        assertEquals(
+            PunditCopy("Ice Hockey card", "Let's make a start on collecting this card"),
+            SectionRows.punditCopy(lastPlayedMapID = null, bestResult = progress(*soccerDone)),
+        )
+        assertEquals(
+            PunditCopy("Soccer card", "Nearly there, WOW!"),
+            SectionRows.punditCopy(lastPlayedMapID = 20, bestResult = progress(*soccerDone)),
+        )
+    }
+
+    @Test fun punditMessageTracksWinsInTheSection() {
+        fun messageAfterWins(count: Int) =
+            SectionRows.punditCopy(lastPlayedMapID = 1, bestResult = progress(*(1..count).toList().toIntArray())).message
+        assertEquals("Great start to collecting this card", messageAfterWins(1))
+        assertEquals("Great start to collecting this card", messageAfterWins(6))
+        assertEquals("Keep up the great work", messageAfterWins(7))
+        assertEquals("Keep up the great work", messageAfterWins(14))
+        assertEquals("Nearly there, WOW!", messageAfterWins(15))
     }
 }

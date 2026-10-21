@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
@@ -169,11 +171,15 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
                 ArrowButton(left = false, visible = section.nextSection != null, onClick = ::next)
             }
             Spacer(Modifier.height(24.dp))
+            // Extends to the bottom of the screen so the list's scrollable
+            // region reaches the edge; the padding keeps the last card clear of
+            // the navigation bar (plus a gap) once scrolled all the way down.
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)),
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = navBarBottom + 40.dp),
             ) {
                 items(rows) { row ->
                     LevelCard(row, section) {
@@ -208,7 +214,7 @@ private fun objectiveKinds(mapID: Int): List<ObjectiveKind> =
 
 /// The iOS screen hides the status bar; restore it when leaving.
 @Composable
-private fun HideStatusBar() {
+internal fun HideStatusBar() {
     val view = LocalView.current
     DisposableEffect(Unit) {
         val controller = WindowCompat.getInsetsController((view.context as Activity).window, view)

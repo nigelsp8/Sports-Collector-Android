@@ -64,7 +64,28 @@ sealed interface LevelListRow {
         get() = this is NextLevel || this is Won
 }
 
+/// The two lines of copy on the launch "pundit" screen.
+data class PunditCopy(val speaker: String, val message: String)
+
 object SectionRows {
+    /// What the launch pundit says - about whichever section `resumeSection`
+    /// will land on, so the copy always refers to the card the player is about
+    /// to see. Until any level has been won there's nothing to report on, so
+    /// generic launch copy is shown instead.
+    fun punditCopy(lastPlayedMapID: Int?, bestResult: (Int) -> LevelProgressStore.Result?): PunditCopy {
+        val hasAnyProgress = GameSection.entries.any { wonCount(it, bestResult) > 0 }
+        if (!hasAnyProgress) return PunditCopy("Olivia says...", "Collect the sports cards one at a time")
+
+        val section = resumeSection(lastPlayedMapID, bestResult)
+        val message = when (wonCount(section, bestResult)) {
+            0 -> "Let's make a start on collecting this card"
+            in 1..6 -> "Great start to collecting this card"
+            in 7..14 -> "Keep up the great work"
+            else -> "Nearly there, WOW!"
+        }
+        return PunditCopy("${section.displayName} card", message)
+    }
+
     /// Section to land on at launch: wherever the player last played, falling
     /// back to their progress frontier (the earliest section with an unplayed
     /// level) if nothing's been recorded yet - e.g. a fresh install, or
