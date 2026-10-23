@@ -1,10 +1,14 @@
 package com.nigelspeight.sportscollector.game
 
 import android.graphics.Bitmap
+import android.graphics.PointF
+import android.graphics.RectF
 import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.engine.Objective
+import com.nigelspeight.sportscollector.engine.TutorialStep
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -184,34 +188,168 @@ class BannerNode(dp: Float) : Node() {
     }
 }
 
-/// Purely cosmetic hint graphic for the tutorial phase - the actual input
-/// restriction lives in `GameEngine.tutorialRect`.
-class TutorialOverlayNode(dp: Float) : Node() {
+/// Shown while `GameEngine.phase == TUTORIAL_RESTRICTED`: dims everything
+/// except the two cells the player is restricted to, draws a box around them,
+/// shows the level's tutorial title/summary, and animates `hand.png` back and
+/// forth between the two cells. Purely cosmetic - the actual input restriction
+/// lives in `GameEngine.tutorialRect`/`attemptSwap`.
+class TutorialOverlayNode(private val dp: Float) : Node() {
+    companion object {
+        /// Gap between the highlighted cells' combined footprint and the dim
+        /// cutout/box around them, as a fraction of `cellSize`.
+        private const val HIGHLIGHT_PADDING = 0.18f
+        private const val HAND_MOVE_DURATION = 0.55
+        private const val HAND_WAIT_DURATION = 0.25
+    }
+
+    private class Geometry(
+        val ax: Float, val ay: Float, val bx: Float, val by: Float, val cellSize: Float,
+    )
+
+    private val dimTop = SpriteNode(color = DIM)
+    private val dimBottom = SpriteNode(color = DIM)
+    private val dimLeft = SpriteNode(color = DIM)
+    private val dimRight = SpriteNode(color = DIM)
+    private val highlightBox = RoundedRectNode(0f, 0f, 0f).apply {
+        strokeColor = WHITE
+        lineWidth = 4 * dp
+        zPosition = 2f
+    }
+    private val titleLabel = LabelNode().apply {
+        color = WHITE
+        vAlign = LabelNode.VAlign.TOP
+        zPosition = 3f
+    }
+    private val summaryLabel = LabelNode().apply {
+        color = WHITE
+        vAlign = LabelNode.VAlign.TOP
+        zPosition = 3f
+    }
     private val hand = SpriteNode(Textures.image("hand")).apply {
         setSize(90 * dp, 76 * dp)
         alpha = 0f
-        zPosition = 50f
+        zPosition = 4f
     }
 
+    private var lastGeometry: Geometry? = null
+    private var handWaypoints: Pair<PointF, PointF>? = null
+
     init {
+        isHidden = true
+        // Above the board and HUD, below the result/pause overlays.
+        zPosition = 100f
+        addChild(dimTop)
+        addChild(dimBottom)
+        addChild(dimLeft)
+        addChild(dimRight)
+        addChild(highlightBox)
+        addChild(titleLabel)
+        addChild(summaryLabel)
         addChild(hand)
     }
 
-    fun show(px: Float, py: Float) {
-        hand.setPosition(px, py)
-        hand.removeAllActions()
-        hand.alpha = 0f
-        hand.run(
-            Action.sequence(
-                Action.fadeAlphaTo(0.85f, 0.3),
-                Action.repeatForever(Action.sequence(Action.scaleTo(1.12f, 0.5), Action.scaleTo(1f, 0.5))),
-            ),
-        )
+    /// Fades everything in, starts the hand's back-and-forth loop, and sets the
+    /// title/summary text. Cell centres and `cellSize` are in scene coordinates
+    /// (already converted from `BoardNode`).
+    fun show(step: TutorialStep, ax: Float, ay: Float, bx: Float, by: Float, cellSize: Float, area: SafeArea) {
+        titleLabel.text = step.title
+        summaryLabel.text = step.summary
+
+        layout(Geometry(ax, ay, bx, by, cellSize), area)
+
+        isHidden = false
+        alpha = 0f
+        run(Action.fadeIn(0.3))
+        startHandLoop()
+    }
+
+    /// Pure repositioning against the same last-shown step, for resizes.
+    fun relayout(area: SafeArea) {
+        lastGeometry?.let { layout(it, area) }
     }
 
     fun hide() {
         hand.removeAllActions()
-        hand.run(Action.fadeOut(0.3))
+        run(Action.sequence(Action.fadeOut(0.25), Action.run { isHidden = true }))
+    }
+
+    private fun layout(geometry: Geometry, area: SafeArea) {
+        lastGeometry = geometry
+        val cellSize = geometry.cellSize
+
+        val padding = cellSize * HIGHLIGHT_PADDING
+        val highlight = RectF(
+            min(geometry.ax, geometry.bx) - cellSize / 2 - padding,
+            min(geometry.ay, geometry.by) - cellSize / 2 - padding,
+            max(geometry.ax, geometry.bx) + cellSize / 2 + padding,
+            max(geometry.ay, geometry.by) + cellSize / 2 + padding,
+        )
+
+        highlightBox.width = highlight.width()
+        highlightBox.height = highlight.height()
+        highlightBox.cornerRadius = cellSize * 0.18f
+        highlightBox.setPosition(highlight.centerX(), highlight.centerY())
+
+        layoutDim(highlight, area.screenWidth, area.screenHeight)
+
+        // Clears `HUDNode`'s top-zone level/score/moves badges, which sit a
+        // width-scaled band (~0.15 x width) under a 12dp inset from the safe
+        // area's top edge - see `HUDNode.layout`.
+        val width = area.width
+        val hudTopZoneClearance = width * 0.16f + 12 * dp + 24 * dp
+        val titleTopY = area.centerY - area.height / 2 + hudTopZoneClearance
+        titleLabel.fontSize = min(width * 0.1f, 56 * dp)
+        titleLabel.setPosition(area.centerX, titleTopY)
+        summaryLabel.fontSize = min(width * 0.055f, 28 * dp)
+        summaryLabel.maxLayoutWidth = area.screenWidth * 0.86f
+        summaryLabel.setPosition(area.centerX, titleTopY + titleLabel.measureHeight() + 10 * dp)
+
+        // One tile right, one tile down from each highlighted cell.
+        handWaypoints = PointF(geometry.ax + cellSize, geometry.ay + cellSize) to
+            PointF(geometry.bx + cellSize, geometry.by + cellSize)
+        if (hand.alpha > 0f) startHandLoop()
+    }
+
+    private fun layoutDim(highlight: RectF, screenWidth: Float, screenHeight: Float) {
+        val halfW = screenWidth / 2
+        val halfH = screenHeight / 2
+
+        val topHeight = max(0f, highlight.top + halfH)
+        dimTop.setSize(screenWidth, topHeight)
+        dimTop.setPosition(0f, highlight.top - topHeight / 2)
+
+        val bottomHeight = max(0f, halfH - highlight.bottom)
+        dimBottom.setSize(screenWidth, bottomHeight)
+        dimBottom.setPosition(0f, highlight.bottom + bottomHeight / 2)
+
+        val leftWidth = max(0f, highlight.left + halfW)
+        dimLeft.setSize(leftWidth, highlight.height())
+        dimLeft.setPosition(highlight.left - leftWidth / 2, highlight.centerY())
+
+        val rightWidth = max(0f, halfW - highlight.right)
+        dimRight.setSize(rightWidth, highlight.height())
+        dimRight.setPosition(highlight.right + rightWidth / 2, highlight.centerY())
+    }
+
+    private fun startHandLoop() {
+        val (posA, posB) = handWaypoints ?: return
+        hand.removeAllActions()
+        hand.setPosition(posA.x, posA.y)
+        hand.alpha = 0f
+        val wait = Action.wait(HAND_WAIT_DURATION)
+        hand.run(
+            Action.sequence(
+                Action.fadeAlphaTo(0.9f, 0.3),
+                Action.repeatForever(
+                    Action.sequence(
+                        wait,
+                        Action.moveTo(posB.x, posB.y, HAND_MOVE_DURATION, Timing.EASE_IN_EASE_OUT),
+                        wait,
+                        Action.moveTo(posA.x, posA.y, HAND_MOVE_DURATION, Timing.EASE_IN_EASE_OUT),
+                    ),
+                ),
+            ),
+        )
     }
 }
 
@@ -462,23 +600,43 @@ private class ObjectiveRequirementNode(private val dp: Float) : Node() {
     }
 }
 
-/// Full-screen "What You Need!" overlay shown when a level first loads: a list
-/// of the level's objectives, a Back button that returns to level select, and a
+/// Full-screen "To Do!" overlay shown when a level first loads: a box listing
+/// the level's objectives, a Back button that returns to level select, and a
 /// Continue button that dismisses the overlay so play can begin.
 class ObjectivesOverlayNode(private val dp: Float) : Node() {
+    companion object {
+        /// `objectiveboxTop`/`Middle`/`Bottom`'s own pixel dimensions (790x64
+        /// each), so the top/bottom caps can be scaled from the box's on-screen
+        /// width without stretching, the same way `PauseOverlayNode` derives
+        /// `pausebox.png`'s height.
+        private const val BOX_NATIVE_WIDTH = 790f
+        private const val BOX_CAP_NATIVE_HEIGHT = 64f
+    }
+
     private val dimOverlay = SpriteNode(color = DIM)
-    private val title = titleLabel("What You Need!", 72 * dp)
+
+    /// Three-piece box - matches `PauseOverlayNode`'s pausebox styling, but
+    /// stretches vertically to fit however many objectives a level has instead
+    /// of using one fixed-aspect image. The top/bottom caps keep their native
+    /// aspect ratio; the middle stretches to fill whatever's left.
+    private val boxTop = SpriteNode(Textures.image("objectiveboxTop"))
+    private val boxMiddle = SpriteNode(Textures.image("objectiveboxMiddle"))
+    private val boxBottom = SpriteNode(Textures.image("objectiveboxBottom"))
+
+    private val title = titleLabel("To Do!", 72 * dp).apply { vAlign = LabelNode.VAlign.TOP }
     private val objectivesContainer = Node()
     private val backButton = SpriteNode(Textures.image("backbutton"))
     private val continueButton = SpriteNode(Textures.image("nextbutton"))
     private var rowNodes: List<ObjectiveRequirementNode> = emptyList()
-    private var lastWidth = 0f
-    private var lastHeight = 0f
+    private var lastArea: SafeArea? = null
 
     init {
         isHidden = true
         zPosition = 150f
         addChild(dimOverlay)
+        addChild(boxTop)
+        addChild(boxMiddle)
+        addChild(boxBottom)
         addChild(title)
         addChild(objectivesContainer)
         addChild(backButton)
@@ -494,7 +652,7 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
                 objectivesContainer.addChild(it)
             }
         }
-        if (lastWidth > 0) layoutObjectiveRows(lastWidth)
+        lastArea?.let(::layout)
     }
 
     /// Content is laid out within the safe area; the dim overlay still covers
@@ -502,40 +660,69 @@ class ObjectivesOverlayNode(private val dp: Float) : Node() {
     fun layout(area: SafeArea) {
         val width = area.width
         val height = area.height
-        lastWidth = width
-        lastHeight = height
+        lastArea = area
         area.coverScreen(this, dimOverlay)
 
-        // "What You Need!" is long enough that a fixed fraction-of-width font
-        // size overflowed the screen - shrink to fit instead.
-        val maxTitleWidth = width * 0.9f
+        val boxWidth = width * 0.82f
+        val innerHorizontalPadding = 40 * dp
+        val innerTopPadding = 20 * dp
+        val innerBottomPadding = 20 * dp
+        val titleToRowsGap = 16 * dp
+
+        // "To Do!" is short, but keep the shrink-to-fit guard in case a future
+        // localization runs long.
+        val maxTitleWidth = boxWidth - innerHorizontalPadding * 2
         var titleFontSize = min(width * 0.14f, 72 * dp)
         while (true) {
             title.fontSize = titleFontSize
             if (title.measureWidth() <= maxTitleWidth || titleFontSize <= 20 * dp) break
             titleFontSize -= 4 * dp
         }
-        title.setPosition(0f, -height * 0.28f)
+
+        val iconSize = min(width * 0.14f, 64 * dp)
+        val rowHeight = iconSize * 1.3f
+        val rowsHeight = rowNodes.size * rowHeight
+        val titleHeight = title.measureHeight()
+        val contentHeight = titleHeight + if (rowNodes.isEmpty()) 0f else titleToRowsGap + rowsHeight
+
+        val capScale = boxWidth / BOX_NATIVE_WIDTH
+        val capHeight = BOX_CAP_NATIVE_HEIGHT * capScale
+        val middleHeight = max(contentHeight + innerTopPadding + innerBottomPadding, capHeight * 0.5f)
+        val boxHeight = capHeight * 2 + middleHeight
 
         val buttonSize = width * 0.2f
         val buttonY = height / 2 - buttonSize * 0.75f - 24 * dp
+        val continueButtonTopEdge = buttonY - buttonSize * 1.5f / 2
+
+        // Centre the box in the space between the safe area's top edge and the
+        // Continue button.
+        val topBoundary = -height / 2
+        val bottomBoundary = continueButtonTopEdge - 20 * dp
+        val availableCenterY = (topBoundary + bottomBoundary) / 2
+        val boxTopEdgeY = availableCenterY - boxHeight / 2
+
+        boxTop.setSize(boxWidth, capHeight)
+        boxTop.setPosition(0f, boxTopEdgeY + capHeight / 2)
+        boxMiddle.setSize(boxWidth, middleHeight)
+        boxMiddle.setPosition(0f, boxTopEdgeY + capHeight + middleHeight / 2)
+        boxBottom.setSize(boxWidth, capHeight)
+        boxBottom.setPosition(0f, boxTopEdgeY + capHeight + middleHeight + capHeight / 2)
+
+        title.setPosition(0f, boxTopEdgeY + capHeight + innerTopPadding)
+
+        val rowsTopY = title.y + titleHeight + titleToRowsGap
+        layoutObjectiveRows(rowsTopY, iconSize, rowHeight)
+
         backButton.setSize(buttonSize, buttonSize)
         backButton.setPosition(-width * 0.18f, buttonY)
         continueButton.setSize(buttonSize * 1.5f, buttonSize * 1.5f)
         continueButton.setPosition(width * 0.18f, buttonY)
-
-        layoutObjectiveRows(width)
     }
 
-    private fun layoutObjectiveRows(width: Float) {
-        if (rowNodes.isEmpty()) return
-        val iconSize = min(width * 0.14f, 64 * dp)
-        val rowHeight = iconSize * 1.3f
-        val totalHeight = rowNodes.size * rowHeight
-        val startY = -(totalHeight / 2 - rowHeight / 2)
+    private fun layoutObjectiveRows(topY: Float, iconSize: Float, rowHeight: Float) {
         rowNodes.forEachIndexed { index, row ->
             row.layout(iconSize, iconSize * 0.5f)
-            row.setPosition(0f, startY + index * rowHeight)
+            row.setPosition(0f, topY + rowHeight / 2 + index * rowHeight)
         }
     }
 

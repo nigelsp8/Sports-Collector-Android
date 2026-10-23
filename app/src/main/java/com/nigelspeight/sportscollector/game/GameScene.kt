@@ -1,6 +1,7 @@
 package com.nigelspeight.sportscollector.game
 
 import com.nigelspeight.sportscollector.AppServices
+import com.nigelspeight.sportscollector.analytics.Analytics
 import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.engine.EnginePhase
 import com.nigelspeight.sportscollector.engine.GameEngine
@@ -9,6 +10,7 @@ import com.nigelspeight.sportscollector.engine.GridPoint
 import com.nigelspeight.sportscollector.engine.ObjectiveKind
 import com.nigelspeight.sportscollector.engine.StarThreshold
 import com.nigelspeight.sportscollector.engine.TileType
+import com.nigelspeight.sportscollector.engine.TutorialStep
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.random.Random
 
@@ -79,6 +81,9 @@ class GameScene(
     private var pendingWinScore: Int? = null
     private var pendingLose = false
     private var announcedTutorial = false
+    /// Set while `tutorialOverlay` is showing, so `layoutForCurrentSize()` can
+    /// keep its highlight/dim/hand tracking the board through resizes.
+    private var activeTutorialStep: TutorialStep? = null
     /// The pointer currently pressing the pause button, if any.
     private var pauseButtonPointer: Int? = null
 
@@ -151,6 +156,7 @@ class GameScene(
         loseOverlay.layout(area)
         objectivesOverlay.layout(area)
         pauseOverlay.layout(area)
+        if (activeTutorialStep != null) tutorialOverlay.relayout(area)
     }
 
     private fun seedInitialTiles() {
@@ -213,14 +219,11 @@ class GameScene(
             }
         }
 
-        if (!announcedTutorial && engine.phase == EnginePhase.TUTORIAL_RESTRICTED) {
+        val step = engine.tutorialStep
+        if (!announcedTutorial && engine.phase == EnginePhase.TUTORIAL_RESTRICTED && step != null) {
             announcedTutorial = true
-            engine.tutorialRect?.let { rect ->
-                val center = GridPoint((rect.minRow + rect.maxRow) / 2, (rect.minCol + rect.maxCol) / 2)
-                val (px, py) = boardNode.point(center)
-                val p = boardNode.convertToRoot(px, py)
-                tutorialOverlay.show(p.x, p.y)
-            }
+            activeTutorialStep = step
+            showTutorialOverlay(step)
         }
 
         tick(deltaTime)
@@ -388,6 +391,17 @@ class GameScene(
             is GameEvent.SwapAnimated -> {
                 boardNode.swapTileNodes(event.a, event.b)
                 //playSound("Swap_Pill1A")
+                // While a tutorial is restricting input, this is necessarily the
+                // one allowed swap (nothing else could have been accepted) - hide
+                // the overlay here, right as the swap happens, rather than waiting
+                // for `TutorialUnlocked` (fired once the match that follows has
+                // fully resolved - matches, falls and spawns can take a while to
+                // visually settle, and the overlay has nothing left to teach once
+                // the swap itself is made).
+                if (activeTutorialStep != null) {
+                    activeTutorialStep = null
+                    tutorialOverlay.hide()
+                }
             }
 
             is GameEvent.TilePlaced -> {
@@ -425,7 +439,13 @@ class GameScene(
 
             GameEvent.NoMoreMovesShuffleFinished -> resyncAllTilePositions()
 
-            GameEvent.TutorialUnlocked -> tutorialOverlay.hide()
+            GameEvent.TutorialUnlocked -> {
+                // Normally already hidden by the swap itself (see `SwapAnimated`).
+                if (activeTutorialStep != null) {
+                    activeTutorialStep = null
+                    tutorialOverlay.hide()
+                }
+            }
 
             is GameEvent.Won -> {
                 // The rotating win backdrop swaps in immediately, so the player
@@ -437,6 +457,7 @@ class GameScene(
                 winBackground.isHidden = false
                 pendingWinScore = event.score
                 pendingOutcomeAt = lastFallEventTime ?: animationTime
+                AudioManager.playMusic("PILLPOPTUNE", loop = false)
             }
 
             GameEvent.Lost -> {
@@ -447,12 +468,12 @@ class GameScene(
                 loseBackground.isHidden = false
                 pendingLose = true
                 pendingOutcomeAt = lastFallEventTime ?: animationTime
+                AudioManager.playMusic("DoctorPopperLoseJingle_4sec", loop = false)
             }
         }
     }
 
     private fun revealWin(score: Int) {
-        AudioManager.playMusic("PILLPOPTUNE", loop = false)
         // The engine's own score/stars are computed the instant the board is
         // solved, before the moves-remaining bonus the win overlay reveals -
         // recompute both against the post-bonus total so the persisted result
@@ -461,14 +482,23 @@ class GameScene(
         val finalScore = score + movesLeft * WinOverlayNode.MOVE_BONUS_PER_MOVE
         val finalStars = StarThreshold.stars(finalScore, level.starThresholds)
         AppServices.progress.recordWin(level.mapNumber, finalScore, finalStars)
+        Analytics.log(Analytics.Action.GameWon)
         winOverlay.show(score, movesLeft, finalStars) { currentScore, moves ->
             hud.update(level.mapNumber, currentScore, moves, engine.objectives)
         }
     }
 
     private fun revealLose() {
-        AudioManager.playMusic("DoctorPopperLoseJingle_4sec", loop = false)
         loseOverlay.show()
+    }
+
+    private fun showTutorialOverlay(step: TutorialStep) {
+        val (ax, ay) = boardNode.point(step.a)
+        val (bx, by) = boardNode.point(step.b)
+        val a = boardNode.convertToRoot(ax, ay)
+        val b = boardNode.convertToRoot(bx, by)
+        tutorialOverlay.show(step, a.x, a.y, b.x, b.y, boardNode.cellSize, safeArea)
+        playSound("ShowHint")
     }
 
     /// After a shuffle the engine's board has an entirely fresh arrangement;
@@ -567,18 +597,23 @@ class GameScene(
             }
             return
         }
-        if (hud.containsPauseToggle(x - hud.x, y - hud.y)) {
-            pauseButtonPointer = pointerId
-            hud.setPauseButtonPressed(true)
-            if (AudioManager.areSoundsOn()) playSound("Menu1")
-            togglePause()
-            if (AudioManager.areSoundsOn()) playSound("Menu1")
-            return
-        }
-        if (HUDNode.SHOW_SPEED_BUTTON && hud.containsSpeedToggle(x - hud.x, y - hud.y)) {
-            playSound("Menu1")
-            cycleDebugSpeed()
-            return
+        // While a tutorial is restricting input to one specific swap, every
+        // other control (pause, debug speed) is disabled too, so the only thing
+        // the player can do is make that one move.
+        if (engine.phase != EnginePhase.TUTORIAL_RESTRICTED) {
+            if (hud.containsPauseToggle(x - hud.x, y - hud.y)) {
+                pauseButtonPointer = pointerId
+                hud.setPauseButtonPressed(true)
+                if (AudioManager.areSoundsOn()) playSound("Menu1")
+                togglePause()
+                if (AudioManager.areSoundsOn()) playSound("Menu1")
+                return
+            }
+            if (HUDNode.SHOW_SPEED_BUTTON && hud.containsSpeedToggle(x - hud.x, y - hud.y)) {
+                playSound("Menu1")
+                cycleDebugSpeed()
+                return
+            }
         }
         engine.notifyUserInteraction()
         val gp = boardNode.gridPoint(x - boardNode.x, y - boardNode.y) ?: return
@@ -592,9 +627,13 @@ class GameScene(
         } else {
             // Only show the tile as selected if a move is actually possible from
             // here - a cell with no tile, or a tap while the board is
-            // mid-animation/won/lost, can never lead anywhere.
+            // mid-animation/won/lost, can never lead anywhere. While a tutorial
+            // is restricting input, that further narrows to just the two
+            // highlighted cells, so tapping elsewhere on the board doesn't even
+            // show a selection ring.
             if (boardNode.tileNode(gp) == null ||
-                (engine.phase != EnginePhase.IDLE && engine.phase != EnginePhase.TUTORIAL_RESTRICTED)
+                (engine.phase != EnginePhase.IDLE && engine.phase != EnginePhase.TUTORIAL_RESTRICTED) ||
+                (engine.phase == EnginePhase.TUTORIAL_RESTRICTED && engine.tutorialRect?.contains(gp) != true)
             ) return
             selectedPoint = gp
             selectedAt = animationTime

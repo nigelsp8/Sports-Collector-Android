@@ -186,7 +186,7 @@ open class SpriteNode(var texture: Texture? = null, var color: Int? = null) : No
 /// `SKLabelNode` analogue with optional outline (`NSAttributedString` stroke).
 class LabelNode(fontSize: Float = 16f) : Node() {
     enum class HAlign { LEFT, CENTER, RIGHT }
-    enum class VAlign { CENTER, BASELINE }
+    enum class VAlign { TOP, CENTER, BASELINE }
 
     var text: String = ""
     var fontSize: Float = fontSize
@@ -201,6 +201,10 @@ class LabelNode(fontSize: Float = 16f) : Node() {
     var strokeWidthPercent = 0f
     var hAlign = HAlign.CENTER
     var vAlign = VAlign.CENTER
+    /// When set, word-wraps `text` onto as many lines as it needs to stay
+    /// within this width, like `SKLabelNode.numberOfLines = 0` with a
+    /// `preferredMaxLayoutWidth`. `vAlign` then positions the first line.
+    var maxLayoutWidth: Float? = null
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -215,32 +219,60 @@ class LabelNode(fontSize: Float = 16f) : Node() {
         this.fontSize = fontSize
     }
 
-    fun measureWidth(): Float = fillPaint.measureText(text)
+    /// Width of the widest line.
+    fun measureWidth(): Float = lines().maxOfOrNull { fillPaint.measureText(it) } ?: 0f
+
+    /// Height of every line together (each ascent to descent).
+    fun measureHeight(): Float = lineHeight() * lines().size
+
+    private fun lineHeight(): Float = fillPaint.fontMetrics.let { it.descent - it.ascent }
+
+    private fun lines(): List<String> {
+        val maxWidth = maxLayoutWidth ?: return listOf(text)
+        val lines = mutableListOf<String>()
+        var current = ""
+        for (word in text.split(' ')) {
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (current.isNotEmpty() && fillPaint.measureText(candidate) > maxWidth) {
+                lines += current
+                current = word
+            } else {
+                current = candidate
+            }
+        }
+        lines += current
+        return lines
+    }
 
     override fun drawSelf(canvas: Canvas, alpha: Float) {
         if (text.isEmpty()) return
-        val width = measureWidth()
-        val left = when (hAlign) {
-            HAlign.LEFT -> 0f
-            HAlign.CENTER -> -width / 2
-            HAlign.RIGHT -> -width
-        }
-        val baseline = when (vAlign) {
+        val firstBaseline = when (vAlign) {
+            VAlign.TOP -> -fillPaint.fontMetrics.ascent
             VAlign.BASELINE -> 0f
             VAlign.CENTER -> -(fillPaint.fontMetrics.ascent + fillPaint.fontMetrics.descent) / 2
         }
-        val sc = strokeColor
-        if (sc != null && strokeWidthPercent > 0) {
-            // Drawn under the fill at double width, so the visible outline outside
-            // the glyphs matches iOS's centred stroke.
-            strokePaint.color = sc
-            strokePaint.alpha = ((sc ushr 24) * alpha).toInt().coerceIn(0, 255)
-            strokePaint.strokeWidth = fontSize * strokeWidthPercent / 100f * 2f
-            canvas.drawText(text, left, baseline, strokePaint)
+        val lineHeight = lineHeight()
+        lines().forEachIndexed { index, line ->
+            val width = fillPaint.measureText(line)
+            val left = when (hAlign) {
+                HAlign.LEFT -> 0f
+                HAlign.CENTER -> -width / 2
+                HAlign.RIGHT -> -width
+            }
+            val baseline = firstBaseline + index * lineHeight
+            val sc = strokeColor
+            if (sc != null && strokeWidthPercent > 0) {
+                // Drawn under the fill at double width, so the visible outline
+                // outside the glyphs matches iOS's centred stroke.
+                strokePaint.color = sc
+                strokePaint.alpha = ((sc ushr 24) * alpha).toInt().coerceIn(0, 255)
+                strokePaint.strokeWidth = fontSize * strokeWidthPercent / 100f * 2f
+                canvas.drawText(line, left, baseline, strokePaint)
+            }
+            fillPaint.color = color
+            fillPaint.alpha = ((color ushr 24) * alpha).toInt().coerceIn(0, 255)
+            canvas.drawText(line, left, baseline, fillPaint)
         }
-        fillPaint.color = color
-        fillPaint.alpha = ((color ushr 24) * alpha).toInt().coerceIn(0, 255)
-        canvas.drawText(text, left, baseline, fillPaint)
     }
 }
 

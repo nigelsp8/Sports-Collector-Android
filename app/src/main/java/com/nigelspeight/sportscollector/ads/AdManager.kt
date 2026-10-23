@@ -2,6 +2,7 @@ package com.nigelspeight.sportscollector.ads
 
 import android.app.Activity
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
@@ -12,6 +13,7 @@ import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.nigelspeight.sportscollector.BuildConfig
+import com.nigelspeight.sportscollector.analytics.Analytics
 
 /// Owns the single preloaded interstitial ad slot for the app - mirrors
 /// `AudioManager`'s singleton shape. Callers never juggle ad-load state
@@ -35,6 +37,13 @@ object AdManager {
     private var interstitialAd: InterstitialAd? = null
     private var isLoading = false
     private var pendingCompletion: (() -> Unit)? = null
+
+    /// When an interstitial was last actually presented (`elapsedRealtime`
+    /// millis) - lets callers enforce a minimum gap between ads (see the
+    /// `minimumIntervalMillis` overload of `showInterstitial`) without each
+    /// call site tracking its own timestamp.
+    var lastShownAtMillis: Long? = null
+        private set
 
     /// Starts the Google Mobile Ads SDK and kicks off the first preload - call
     /// once, from `AppServices.init`.
@@ -90,7 +99,29 @@ object AdManager {
         ad.show(activity)
     }
 
+    /// Same as `showInterstitial`, but skips presenting (and just calls
+    /// `completion` immediately) if an ad was already shown within
+    /// `minimumIntervalMillis` - lets callers throttle how often ads
+    /// interrupt the player without tracking their own timestamps.
+    fun showInterstitial(activity: Activity, minimumIntervalMillis: Long, completion: () -> Unit = {}) {
+        val last = lastShownAtMillis
+        if (last != null && SystemClock.elapsedRealtime() - last < minimumIntervalMillis) {
+            completion()
+            return
+        }
+        showInterstitial(activity, completion)
+    }
+
     private val fullScreenCallback = object : FullScreenContentCallback() {
+        override fun onAdShowedFullScreenContent() {
+            lastShownAtMillis = SystemClock.elapsedRealtime()
+            Analytics.log(Analytics.Action.InterstitialPresented)
+        }
+
+        override fun onAdClicked() {
+            Analytics.log(Analytics.Action.InterstitialClicked)
+        }
+
         override fun onAdDismissedFullScreenContent() {
             interstitialAd = null
             resolvePendingCompletion()

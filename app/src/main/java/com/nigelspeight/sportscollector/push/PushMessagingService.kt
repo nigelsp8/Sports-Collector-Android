@@ -16,6 +16,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.nigelspeight.sportscollector.MainActivity
 import com.nigelspeight.sportscollector.R
+import com.nigelspeight.sportscollector.analytics.Analytics
 
 /// Firebase Cloud Messaging hookup - the Android side of the iOS
 /// `AppDelegate`'s `MessagingDelegate`/`UNUserNotificationCenterDelegate`.
@@ -27,6 +28,7 @@ import com.nigelspeight.sportscollector.R
 class PushMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         Log.e(TAG, "FCM registration token: $token")
+        Analytics.setFirebaseToken(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -51,6 +53,7 @@ class PushMessagingService : FirebaseMessagingService() {
             FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     Log.e(TAG, "FCM registration token: ${task.result}")
+                    Analytics.setFirebaseToken(task.result)
                 } else {
                     Log.e(TAG, "Failed to fetch FCM registration token", task.exception)
                 }

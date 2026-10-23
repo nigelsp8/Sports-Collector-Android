@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -97,7 +98,7 @@ class SectionScreenState {
 /// polished counterpart to `LevelSelectScreen`, which stays around for
 /// editing/debugging.
 @Composable
-fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
+fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit, onShowList: () -> Unit) {
     HideStatusBar()
 
     val section = state.section
@@ -136,9 +137,9 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
     ) {
         val cardWidth = maxWidth * 0.5f
 
-        Crossfade(targetState = section, animationSpec = tween(250), label = "background") { shown ->
-            SectionImage(shown, Modifier.fillMaxSize().alpha(0.3f))
-        }
+        // One shared backdrop for every section; each section's own art is
+        // shown only on its summary card.
+        SectionBackground(Modifier.fillMaxSize().alpha(0.3f))
 
         Column(
             modifier = Modifier
@@ -204,6 +205,17 @@ fun SectionScreen(state: SectionScreenState, onPlay: (mapID: Int) -> Unit) {
                 }
             }
         }
+
+        // Opens the full level list (the level-select/editor tool).
+        TextButton(
+            onClick = onShowList,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
+                .padding(top = 16.dp, end = 16.dp),
+        ) {
+            Text("List", color = Color.White)
+        }
     }
 }
 
@@ -226,6 +238,21 @@ internal fun HideStatusBar() {
 /// Decoded section art, shared by the background and the card. Each image is
 /// 2048x2048 (~16MB), so only the few most recently shown are kept.
 private val sectionArtCache = LruCache<GameSection, ImageBitmap>(3)
+private var sectionBackground: ImageBitmap? = null
+
+@Composable
+private fun SectionBackground(modifier: Modifier) {
+    val bitmap by produceState(sectionBackground) {
+        if (value == null) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { Textures.uncachedImage("bkgsection").bitmap.asImageBitmap() }.getOrNull()
+            }?.also { sectionBackground = it }
+        }
+    }
+    bitmap?.let {
+        Image(it, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    }
+}
 
 /// A section's background art, decoded off the main thread.
 @Composable

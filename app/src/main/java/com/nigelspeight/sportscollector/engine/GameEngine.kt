@@ -70,13 +70,6 @@ class GameEngine(
 
         private fun spawnDistribution(level: Level): List<Pair<TileType, Int>> =
             level.activeBlocks.map { (type, spec) -> type to spec.spawnPercentage }.filter { it.second > 0 }
-
-        /// Was level 1 only: restricted input to a rect built from the bounding box
-        /// of the level's spawn cells (expanded by one) until the first valid match
-        /// was made (see `settle()`). Disabled for now - always returns `null`, so no
-        /// level shows the tutorial overlay.
-        @Suppress("UNUSED_PARAMETER")
-        private fun tutorialRect(level: Level): GridRect? = null
     }
 
     /// How long a committed swap takes to visually resolve on the rendering
@@ -94,7 +87,9 @@ class GameEngine(
     val objectives: List<Objective> = Objective.objectivesFor(level)
     var phase: EnginePhase = EnginePhase.INTRO_FADE_IN
         private set
-    var tutorialRect: GridRect? = tutorialRect(level)
+    var tutorialStep: TutorialStep? = TutorialCatalog.step(level.id)
+        private set
+    var tutorialRect: GridRect? = tutorialStep?.rect
         private set
 
     /// Debug aid: when > 0, throttles how often the falling phase advances one
@@ -280,6 +275,7 @@ class GameEngine(
 
         if (tutorialRect != null) {
             tutorialRect = null
+            tutorialStep = null
             pendingEvents += GameEvent.TutorialUnlocked
         }
 

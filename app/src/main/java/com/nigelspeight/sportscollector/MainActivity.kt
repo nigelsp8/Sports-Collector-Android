@@ -33,10 +33,6 @@ sealed interface Screen {
 }
 
 class MainActivity : ComponentActivity() {
-    /// Flip to `false` to boot straight into the level-select/editor tool
-    /// instead of the user-facing section carousel.
-    private val launchIntoSectionScreen = true
-
     private val requestNotificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             Log.d("MainActivity", "Push notification permission granted: $granted")
@@ -52,8 +48,9 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             SportsCollectorTheme {
-                val root = if (launchIntoSectionScreen) Screen.Pundit else Screen.LevelSelect
-                val backStack = remember { mutableStateListOf(root) }
+                // Starts on the pundit intro screen, which hands off to the
+                // user-facing section carousel on tap.
+                val backStack = remember { mutableStateListOf<Screen>(Screen.Pundit) }
                 val sectionState = remember { SectionScreenState() }
                 fun pop() {
                     if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
@@ -73,9 +70,11 @@ class MainActivity : ComponentActivity() {
                     Screen.Sections -> SectionScreen(
                         state = sectionState,
                         onPlay = { mapID -> backStack.add(Screen.Game(mapID)) },
+                        onShowList = { backStack.add(Screen.LevelSelect) },
                     )
 
                     Screen.LevelSelect -> LevelSelectScreen(
+                        onBack = ::pop,
                         onPlay = { mapID -> backStack.add(Screen.Game(mapID)) },
                         onEdit = { mapID, level ->
                             backStack.add(Screen.Editor(LevelEditorState(level, mapID, LevelOrder.resourceName(mapID))))

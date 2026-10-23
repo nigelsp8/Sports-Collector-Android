@@ -11,6 +11,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.nigelspeight.sportscollector.ads.AdManager
+import com.nigelspeight.sportscollector.analytics.Analytics
 import com.nigelspeight.sportscollector.level.Level
 import kotlin.math.min
 
@@ -80,17 +81,32 @@ class GameView(
         // `onContinue`/`onRestart` already do - keeps the ad specific to ending
         // a level rather than every use of those buttons (e.g. the pause menu's
         // restart, or the pre-level objectives overlay).
-        newScene.onResultOverlayContinue = { showInterstitial(onContinue) }
-        newScene.onResultOverlayRestart = { showInterstitial { post { presentGameScene() } } }
+        newScene.onResultOverlayContinue = { showResultOverlayInterstitial(onContinue) }
+        newScene.onResultOverlayRestart = { showResultOverlayInterstitial { post { presentGameScene() } } }
         scene = newScene
         newScene.didMove()
+        Analytics.log(Analytics.Action.NewGame)
         lastFrameNanos = 0L
         postInvalidateOnAnimation()
     }
 
-    private fun showInterstitial(completion: () -> Unit) {
+    /// Gates the result-overlay interstitial by how far into the level order
+    /// this level is (`mapNumber` is 1-based): no ads for the first 5 levels,
+    /// then an ad at most every 10 minutes for the next 10, then at most every
+    /// 5 minutes from then on. `completion` always runs, whether or not an ad
+    /// actually showed.
+    private fun showResultOverlayInterstitial(completion: () -> Unit) {
         val activity = context.findActivity()
-        if (activity == null) completion() else AdManager.showInterstitial(activity, completion)
+        val minimumIntervalMinutes = when (level.mapNumber) {
+            in 1..5 -> null
+            in 6..15 -> 10L
+            else -> 5L
+        }
+        if (activity == null || minimumIntervalMinutes == null) {
+            completion()
+        } else {
+            AdManager.showInterstitial(activity, minimumIntervalMinutes * 60_000, completion)
+        }
     }
 
     private tailrec fun Context.findActivity(): Activity? = when (this) {

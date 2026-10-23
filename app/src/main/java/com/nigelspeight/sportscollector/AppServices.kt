@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import com.nigelspeight.sportscollector.ads.AdManager
+import com.nigelspeight.sportscollector.analytics.Analytics
 import com.nigelspeight.sportscollector.audio.AudioManager
 import com.nigelspeight.sportscollector.game.Textures
 import com.nigelspeight.sportscollector.level.Level
@@ -46,6 +47,7 @@ object AppServices {
         Textures.init(assets)
         AudioManager.init(app)
         AdManager.start(app)
+        Analytics.start(app)
         PushMessagingService.start(app)
     }
 

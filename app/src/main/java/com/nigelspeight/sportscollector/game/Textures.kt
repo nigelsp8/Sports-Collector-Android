@@ -48,13 +48,13 @@ object Textures {
 
     private fun fileName(type: TileType): String = when (type) {
         TileType.PINK_TABLET -> "frisbee"               // BLUE
-        TileType.ORANGE_TABLET -> "rugbyball"           // BROWN
+        TileType.ORANGE_TABLET -> "basketball"          // BROWN
         TileType.YELLOW_TABLET -> "boxingglove"         // RED
         TileType.GREEN_TABLET -> "tennisball"           // GREEN
         TileType.PURPLE_TABLET -> "refsshirt"           // BLACK/WHITE
         TileType.BLUE_TABLET -> "soccerballcoloured"    // WHITE/BLACK
 
-        TileType.ORANGE_BLUE_PILL -> "rugbyballx2"
+        TileType.ORANGE_BLUE_PILL -> "basketballx2"
         TileType.PINK_GREEN_PILL -> "frisbeex2"
         TileType.PURPLE_YELLOW_PILL -> "refsshirtx2"
 

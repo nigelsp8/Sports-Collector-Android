@@ -2,12 +2,13 @@ package com.nigelspeight.sportscollector.game
 
 /// `SKActionTimingMode` analogue.
 enum class Timing {
-    LINEAR, EASE_IN, EASE_OUT;
+    LINEAR, EASE_IN, EASE_OUT, EASE_IN_EASE_OUT;
 
     fun apply(t: Float): Float = when (this) {
         LINEAR -> t
         EASE_IN -> t * t
         EASE_OUT -> 1 - (1 - t) * (1 - t)
+        EASE_IN_EASE_OUT -> t * t * (3 - 2 * t)
     }
 }
 

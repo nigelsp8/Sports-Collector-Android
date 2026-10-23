@@ -31,7 +31,7 @@ import com.nigelspeight.sportscollector.level.LevelOrder
 /// button opens the level editor.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LevelSelectScreen(onPlay: (mapID: Int) -> Unit, onEdit: (mapID: Int, level: Level) -> Unit) {
+fun LevelSelectScreen(onBack: () -> Unit, onPlay: (mapID: Int) -> Unit, onEdit: (mapID: Int, level: Level) -> Unit) {
     // Recreated every time this screen re-enters composition (e.g. returning from
     // a played level or the editor), so best scores and edited level data are
     // always re-read fresh. Loaded lazily per row, since only rows actually
@@ -48,6 +48,7 @@ fun LevelSelectScreen(onPlay: (mapID: Int) -> Unit, onEdit: (mapID: Int, level: 
         topBar = {
             TopAppBar(
                 title = { Text("Sports Collector") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = { TextButton(onClick = { confirmReset = true }) { Text("Reset Stars") } },
             )
         },
